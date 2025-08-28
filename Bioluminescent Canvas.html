@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bioluminescent Canvas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0d0d0d;
+            font-family: 'Inter', sans-serif;
+            color: #ffffff;
+        }
+
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: none;
+        }
+
+        .info-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            opacity: 0.7;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+
+        .info-overlay h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+
+        .info-overlay p {
+            font-size: 1rem;
+            font-weight: 300;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="info" class="info-overlay">
+        <h1>BIOLUMINESCENT FIELD</h1>
+        <p>Move your mouse to create waves of light.</p>
+    </div>
+
+    <script>
+        // Get the canvas and its 2D rendering context
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        // Particle configuration
+        const numParticles = 200;
+        const particles = [];
+        const mouse = { x: null, y: null };
+        const maxDistance = 150;
+        const minDistance = 50;
+
+        // Resize the canvas to fit the window and initialize particle positions
+        function resizeCanvas() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+
+            if (particles.length === 0) {
+                for (let i = 0; i < numParticles; i++) {
+                    particles.push(new Particle());
+                }
+            }
+        }
+
+        // Particle class definition
+        class Particle {
+            constructor() {
+                // Set a random initial position within the canvas
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                // Set a random velocity for movement
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
+                // Set a random size for the particle
+                this.size = Math.random() * 2 + 1;
+                // Set a random hue for the color
+                this.hue = Math.random() * 360;
+                this.color = `hsl(${this.hue}, 100%, 70%)`;
+                this.opacity = 0;
+            }
+
+            // Update the particle's position
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Wrap particles around the screen edges
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+
+                // Fade in the particle
+                if (this.opacity < 0.9) {
+                    this.opacity += 0.01;
+                }
+            }
+
+            // Draw the particle on the canvas
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = this.opacity;
+                ctx.fill();
+            }
+
+            // Connect the particle to another if they are close enough
+            connect(otherParticle) {
+                const dx = this.x - otherParticle.x;
+                const dy = this.y - otherParticle.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < maxDistance) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(otherParticle.x, otherParticle.y);
+                    ctx.lineWidth = 1;
+                    const connectionOpacity = 1 - (distance / maxDistance);
+                    ctx.strokeStyle = `hsla(200, 100%, 70%, ${connectionOpacity * 0.5})`;
+                    ctx.globalAlpha = connectionOpacity * 0.5;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Handle mouse movement
+        function handleMouseMove(e) {
+            mouse.x = e.x;
+            mouse.y = e.y;
+            // Hide the info text when the mouse moves
+            const info = document.getElementById('info');
+            info.style.opacity = '0';
+        }
+
+        // Animation loop
+        function animate() {
+            // Fade out the previous frame to create a trail effect
+            ctx.globalAlpha = 0.1;
+            ctx.fillStyle = '#0d0d0d';
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.globalAlpha = 1;
+
+            // Update and draw each particle
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+
+                // Check for mouse interaction
+                if (mouse.x && mouse.y) {
+                    const dx = p.x - mouse.x;
+                    const dy = p.y - mouse.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < maxDistance && distance > minDistance) {
+                        const angle = Math.atan2(dy, dx);
+                        const force = (maxDistance - distance) / 50;
+                        p.x += Math.cos(angle) * force;
+                        p.y += Math.sin(angle) * force;
+                    }
+                }
+            });
+
+            // Connect nearby particles
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    particles[i].connect(particles[j]);
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Event listeners
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('mousemove', handleMouseMove);
+        // Initial setup
+        resizeCanvas();
+        animate();
+    </script>
+</body>
+</html>
