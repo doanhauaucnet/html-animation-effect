@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bioluminescent Nebula</title>
+    <style>
+        /* Basic CSS reset to remove default margins and paddings */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            /* Set a dark background and prevent any scrolling */
+            background-color: #00021a;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+
+        canvas {
+            /* Ensure the canvas is displayed as a block element */
+            display: block;
+        }
+
+        .info-panel {
+            /* Styling for the information text */
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 12px;
+            max-width: 300px;
+            font-size: 14px;
+            line-height: 1.6;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .info-panel h1 {
+            font-size: 20px;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- The canvas element where the animation will be drawn -->
+    <canvas id="nebulaCanvas"></canvas>
+
+    <!-- Information panel to describe the animation -->
+    <div class="info-panel">
+        <h1>Bioluminescent Nebula</h1>
+        <p>Move your cursor to interact with the cosmic dust. The particles will gently flow around it, creating ripples in the nebula.</p>
+    </div>
+
+    <script>
+        // --- Canvas Setup ---
+        const canvas = document.getElementById('nebulaCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas dimensions to fill the entire window
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        // --- Mouse Interaction ---
+        const mouse = {
+            x: null,
+            y: null,
+            radius: 150 // The radius of influence around the mouse
+        };
+
+        // Update mouse coordinates on mousemove event
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = event.x;
+            mouse.y = event.y;
+        });
+        
+        // Reset mouse coordinates when it leaves the window to stop interaction
+        window.addEventListener('mouseout', () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+
+        // --- Particle System ---
+        let particlesArray = [];
+        const numberOfParticles = 200; // Adjust for more or fewer particles
+        const particleColors = ['#85FFBD', '#FFFB7D', '#B2F7EF', '#A7C5EB', '#F0D2E6'];
+
+        // The Particle class defines the properties and behavior of each particle
+        class Particle {
+            constructor(x, y, directionX, directionY, size, color) {
+                this.x = x;
+                this.y = y;
+                this.directionX = directionX;
+                this.directionY = directionY;
+                this.size = size;
+                this.color = color;
+                this.baseX = this.x; // Store original position for return behavior
+                this.baseY = this.y;
+                this.density = (Math.random() * 40) + 5; // How fast it returns to base position
+            }
+
+            // Method to draw the particle on the canvas
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2, false);
+                
+                // Create a glowing effect
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                // Reset shadow properties to not affect other elements
+                ctx.shadowBlur = 0;
+            }
+
+            // Method to update the particle's position and handle interactions
+            update() {
+                // --- Mouse Interaction Logic ---
+                // Calculate distance between particle and mouse
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Force and direction of push from the mouse
+                let forceDirectionX = dx / distance;
+                let forceDirectionY = dy / distance;
+                
+                // Max distance and the force applied within that distance
+                let maxDistance = mouse.radius;
+                let force = (maxDistance - distance) / maxDistance;
+
+                // If the particle is within the mouse's radius of influence
+                if (distance < mouse.radius) {
+                    // Push the particle away from the mouse
+                    this.x -= forceDirectionX * force * this.density;
+                    this.y -= forceDirectionY * force * this.density;
+                } else {
+                    // --- Return to Base Logic ---
+                    // If not interacting with the mouse, gently return to original position
+                    if (this.x !== this.baseX) {
+                        let dx = this.x - this.baseX;
+                        this.x -= dx / 20; // The division factor controls the speed of return
+                    }
+                    if (this.y !== this.baseY) {
+                        let dy = this.y - this.baseY;
+                        this.y -= dy / 20;
+                    }
+                }
+
+                // --- Edge Collision Detection ---
+                // Bounce off the edges of the canvas
+                if (this.x + this.size > width || this.x - this.size < 0) {
+                    this.directionX = -this.directionX;
+                }
+                if (this.y + this.size > height || this.y - this.size < 0) {
+                    this.directionY = -this.directionY;
+                }
+                
+                // Move the particle
+                this.x += this.directionX;
+                this.y += this.directionY;
+
+                // Draw the particle at its new position
+                this.draw();
+            }
+        }
+
+        // --- Initialization and Animation Loop ---
+
+        // Function to create the particles and populate the array
+        function init() {
+            particlesArray = [];
+            for (let i = 0; i < numberOfParticles; i++) {
+                let size = (Math.random() * 3) + 1;
+                let x = (Math.random() * (width - size * 2) + size);
+                let y = (Math.random() * (height - size * 2) + size);
+                let directionX = (Math.random() * 0.4) - 0.2; // Slow, random movement
+                let directionY = (Math.random() * 0.4) - 0.2;
+                let color = particleColors[Math.floor(Math.random() * particleColors.length)];
+
+                particlesArray.push(new Particle(x, y, directionX, directionY, size, color));
+            }
+        }
+
+        // The main animation loop
+        function animate() {
+            // Use a semi-transparent background to create a "trailing" or "fading" effect
+            ctx.fillStyle = 'rgba(0, 2, 26, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+
+            // Update and draw each particle in the array
+            for (let i = 0; i < particlesArray.length; i++) {
+                particlesArray[i].update();
+            }
+            
+            // Request the next frame to continue the loop
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Listeners ---
+
+        // Handle window resize to make the animation responsive
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            // Re-initialize the particles to fit the new screen size
+            init();
+        });
+
+        // --- Start the Animation ---
+        init();
+        animate();
+    </script>
+</body>
+</html>

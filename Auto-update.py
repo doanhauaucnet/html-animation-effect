@@ -16,7 +16,8 @@ def get_animation_files_from_disk():
         return []
     
     # List all files in the directory, filter for .html files, and prepend the folder path.
-    return [os.path.join(ANIM_FOLDER, f) for f in os.listdir(ANIM_FOLDER) if f.endswith('.html')]
+    # It now correctly handles paths for both Windows and Unix-like systems.
+    return [os.path.join(ANIM_FOLDER, f).replace("\\", "/") for f in os.listdir(ANIM_FOLDER) if f.endswith('.html')]
 
 def update_library_file(disk_files):
     """
@@ -79,59 +80,70 @@ def update_library_file(disk_files):
 
 def manage_git_repository():
     """
-    Checks for git changes, and if any exist, adds, commits, and pushes them.
-    The commit message is based on the file changes.
+    Stashes local changes, pulls from remote, reapplies changes,
+    and then adds, commits, and pushes if necessary.
     """
     try:
-        # Check the status of the repository.
-        # '--porcelain' gives an easy-to-parse output.
+        # Check if there are any local changes (staged or unstaged).
         status_result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
         status_output = status_result.stdout.strip()
+        has_local_changes = bool(status_output)
 
-        if not status_output:
-            print("No git changes to commit.")
+        if has_local_changes:
+            print("Local changes detected. Stashing them temporarily...")
+            subprocess.run(['git', 'stash'], check=True, capture_output=True)
+
+        # Now, pull the latest changes from the remote.
+        # --rebase will prevent messy merge commits for a cleaner history.
+        print("Pulling latest changes from remote repository...")
+        subprocess.run(['git', 'pull', '--rebase'], check=True)
+
+        if has_local_changes:
+            print("Re-applying stashed changes...")
+            subprocess.run(['git', 'stash', 'pop'], check=True, capture_output=True)
+        
+        # After pulling and potentially popping, check status again to see if we need to commit.
+        final_status_result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
+        final_status_output = final_status_result.stdout.strip()
+
+        if not final_status_output:
+            print("No git changes to commit after sync.")
             return
 
         print("Git changes detected. Preparing to commit...")
 
         # --- Determine the commit message ---
         commit_message = "Update animation library" # Default message
-        changed_files = status_output.split('\n')
+        changed_files = final_status_output.split('\n')
         
         # Prioritize newly added files for the commit message.
         added_files = [line[3:] for line in changed_files if line.startswith('??')]
         if added_files:
-            # Use the name of the first new file as the commit message.
             commit_message = f"Add {os.path.basename(added_files[0])}"
         else:
-            # If no new files, use the name of the first modified file.
-            modified_files = [line[3:] for line in changed_files if line.startswith(' M')]
+            modified_files = [line[3:] for line in changed_files if line.strip().startswith('M')]
             if modified_files:
                 commit_message = f"Update {os.path.basename(modified_files[0])}"
 
         # --- Execute Git Commands ---
         print(f"Using commit message: '{commit_message}'")
-
-        # 1. Add all changes
         subprocess.run(['git', 'add', '.'], check=True)
         print("Staged all changes.")
-
-        # 2. Commit the changes
         subprocess.run(['git', 'commit', '-m', commit_message], check=True)
         print("Committed changes.")
-
-        # 3. Push to the remote repository
-        # Using 'gh' to push, as requested. 'git push' would also work.
-        subprocess.run(['gh', 'repo', 'sync'], check=True) # `gh repo sync` is a robust way to push/pull
-        # Alternatively, a simple push:
-        # subprocess.run(['git', 'push'], check=True)
-        print("Pushed changes to remote repository.")
+        print("Pushing changes to remote repository...")
+        subprocess.run(['git', 'push'], check=True)
+        print("Successfully pushed changes.")
 
     except FileNotFoundError:
-        print("Error: 'git' or 'gh' command not found. Make sure Git and GitHub CLI are installed and in your PATH.")
+        print("Error: 'git' command not found. Make sure Git is installed and in your PATH.")
     except subprocess.CalledProcessError as e:
         print(f"An error occurred while running a git command: {e}")
-        print(f"Stderr: {e.stderr}")
+        # Print the standard error from the command for better debugging.
+        if e.stderr:
+            print(f"Stderr: {e.stderr.strip()}")
+        else:
+            print("Stderr: Not available.")
 
 def main():
     """Main function to run the update process."""
