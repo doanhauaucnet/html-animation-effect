@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animation Library</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <style>
+        /* Basic styling for the body and font */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* A dark gray background */
+            color: #f3f4f6;
+        }
+        /* Style for the iframe to ensure it's contained and looks good */
+        #animation-preview {
+            border: 1px solid #374151; /* A slightly lighter gray border */
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        /* Custom styles for the navigation buttons for a better look and feel */
+        .nav-button {
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .nav-button.active {
+            background-color: #3b82f6; /* Blue-500 for active state */
+            color: white;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row h-screen overflow-hidden">
+
+    <!-- Sidebar Navigation -->
+    <aside class="w-full md:w-64 bg-gray-900 p-6 space-y-4 overflow-y-auto">
+        <h1 class="text-2xl font-bold text-white">My Animations</h1>
+        <nav id="animation-list" class="space-y-2">
+            <!-- Animation links will be added here by JavaScript -->
+            <!-- You can also add them manually like this: -->
+            <!-- <button data-src="Fluid Particle Art.html" class="nav-button w-full text-left bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg">Fluid Particle Art</button> -->
+            <!-- <button data-src="Bioluminescent Canvas.html" class="nav-button w-full text-left bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg">Bioluminescent Canvas</button> -->
+        </nav>
+    </aside>
+
+    <!-- Main Content Area for Previewing Animations -->
+    <main class="flex-1 flex flex-col p-6">
+        <div class="flex-1 w-full h-full">
+            <!-- The iframe will display the selected animation -->
+            <iframe id="animation-preview" class="w-full h-full bg-black" src="" title="Animation Preview"></iframe>
+        </div>
+    </main>
+
+    <script>
+        // --- Configuration ---
+        // Add the filenames of your HTML animations to this array.
+        // Make sure this library file is in the SAME folder as your animation files.
+        const animationFiles = [
+            "Anim/Bioluminescent Canvas.html",
+            "Anim/Fluid Particle Art.html",
+            "Anim/Interactive Cosmic Nebula.html",
+            "Anim/Interactive Particle Nebula.html",
+            "Anim/Interactive Universe Animation.html"
+        ];
+
+        // --- DOM Elements ---
+        const animationList = document.getElementById('animation-list');
+        const previewFrame = document.getElementById('animation-preview');
+        let currentButton = null;
+
+        // --- Functions ---
+
+        /**
+         * Creates a button for an animation and adds it to the navigation list.
+         * @param {string} fileName - The filename of the animation HTML file.
+         */
+        function createAnimationLink(fileName) {
+            const button = document.createElement('button');
+            // Create a more readable name from the filename
+            const displayName = fileName.replace('.html', '').replace(/([A-Z])/g, ' $1').trim();
+            
+            button.textContent = displayName;
+            button.dataset.src = fileName; // Store the filename in a data attribute
+            button.className = 'nav-button w-full text-left bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg';
+            
+            // Add a click event listener to load the animation
+            button.addEventListener('click', () => {
+                // Set the iframe source to the file's name
+                previewFrame.src = fileName;
+                
+                // Update active button styling
+                if (currentButton) {
+                    currentButton.classList.remove('active');
+                }
+                button.classList.add('active');
+                currentButton = button;
+            });
+
+            animationList.appendChild(button);
+        }
+
+        // --- Initialization ---
+
+        // Populate the navigation list with buttons for each animation file
+        animationFiles.forEach(createAnimationLink);
+
+        // Automatically load the first animation on page load
+        const firstButton = animationList.querySelector('.nav-button');
+        if (firstButton) {
+            firstButton.click();
+        } else {
+            // If no animations are listed, show a message in the preview area
+            previewFrame.srcdoc = `<body style='background-color:#111827; color:white; display:flex; justify-content:center; align-items:center; font-family: Inter, sans-serif;'><h1>No animations found. Add files to the 'animationFiles' array in the script.</h1></body>`;
+        }
+
+    </script>
+
+</body>
+</html>
