@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elemental Flow | Abstract Animation</title>
+    <style>
+        /* Basic CSS reset to ensure the canvas fills the entire screen */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+            font-family: 'Inter', sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        /* Style for the title overlay */
+        .title {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 3rem;
+            font-weight: 200;
+            letter-spacing: 0.5rem;
+            text-align: center;
+            text-transform: uppercase;
+            opacity: 0.7;
+            pointer-events: none; /* Allows mouse events to pass through to the canvas */
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+        /* Responsive font size for smaller screens */
+        @media (max-width: 768px) {
+            .title {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+    <!-- Google Fonts import for a clean, modern look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- The title displayed over the animation -->
+    <div class="title">Elemental Flow</div>
+
+    <!-- The canvas element where the animation will be rendered -->
+    <canvas id="elemental-canvas"></canvas>
+
+    <!-- Import the three.js library for 3D graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 300; // Move camera back to see the particles
+
+        const renderer = new THREE.WebGLRenderer({
+            canvas: document.getElementById('elemental-canvas'),
+            antialias: true, // Smoother edges
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high-DPI screens
+
+        // --- PARTICLE SYSTEM ---
+        const particleCount = 50000; // Number of particles
+        const positions = new Float32Array(particleCount * 3); // (x, y, z) for each particle
+        const colors = new Float32Array(particleCount * 3); // (r, g, b) for each particle
+
+        const geometry = new THREE.BufferGeometry();
+        const material = new THREE.PointsMaterial({
+            size: 1.5,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending, // Creates a glowing effect
+            transparent: true,
+            opacity: 0.8,
+            depthWrite: false, // Important for blending
+        });
+
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // --- MOUSE INTERACTION ---
+        const mouse = new THREE.Vector2(0, 0);
+        const targetMouse = new THREE.Vector2(0, 0);
+        const mouseRepelStrength = 150; // How strongly particles are pushed by the mouse
+
+        window.addEventListener('mousemove', (event) => {
+            // Normalize mouse coordinates (-1 to +1)
+            targetMouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            targetMouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        });
+        
+        // Add touch support for mobile devices
+        window.addEventListener('touchmove', (event) => {
+            if (event.touches.length > 0) {
+                targetMouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+                targetMouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+            }
+        }, { passive: false });
+
+
+        // --- PARTICLE INITIALIZATION ---
+        const particleData = [];
+        const colorPalette = [
+            new THREE.Color(0xff4500), // Fiery Orange
+            new THREE.Color(0x1e90ff), // Watery Blue
+            new THREE.Color(0xffd700), // Golden Light
+            new THREE.Color(0xda70d6), // Ethereal Orchid
+        ];
+
+        for (let i = 0; i < particleCount; i++) {
+            const i3 = i * 3;
+
+            // Position particles in a large sphere for a 3D feel
+            const theta = Math.random() * 2 * Math.PI;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            const r = Math.random() * 400 + 50;
+            
+            positions[i3] = r * Math.sin(phi) * Math.cos(theta);
+            positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+            positions[i3 + 2] = r * Math.cos(phi);
+
+            // Assign a random color from the palette
+            const color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+            colors[i3] = color.r;
+            colors[i3 + 1] = color.g;
+            colors[i3 + 2] = color.b;
+            
+            // Store original position and velocity for animation
+            particleData.push({
+                velocity: new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.1,
+                    (Math.random() - 0.5) * 0.1,
+                    (Math.random() - 0.5) * 0.1
+                ),
+                originalPos: new THREE.Vector3(positions[i3], positions[i3 + 1], positions[i3 + 2]),
+                wander: Math.random() * 2 + 1, // Unique wander factor for each particle
+            });
+        }
+
+        // Set the attributes on the geometry
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        // --- ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+            const positions = particles.geometry.attributes.position.array;
+            
+            // Smoothly interpolate mouse position for a softer follow effect
+            mouse.x += (targetMouse.x - mouse.x) * 0.05;
+            mouse.y += (targetMouse.y - mouse.y) * 0.05;
+            
+            // Convert normalized mouse coords to world coords
+            const mouseWorld = new THREE.Vector3(mouse.x * (window.innerWidth/4), mouse.y * (window.innerHeight/4), 0);
+            
+            // Update each particle's position
+            for (let i = 0; i < particleCount; i++) {
+                const i3 = i * 3;
+                
+                const pData = particleData[i];
+                const pos = new THREE.Vector3(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+                
+                // --- Noise-based movement for an organic feel ---
+                // The sine and cosine waves create a swirling, flowing motion
+                const noiseX = Math.sin(elapsedTime * 0.5 + pData.wander) * 0.5;
+                const noiseY = Math.cos(elapsedTime * 0.5 + pData.wander) * 0.5;
+                const noiseZ = Math.sin(elapsedTime * 0.5 + pData.originalPos.z * 0.1) * 0.5;
+
+                pData.velocity.x += noiseX * 0.005;
+                pData.velocity.y += noiseY * 0.005;
+                pData.velocity.z += noiseZ * 0.005;
+                
+                // --- Mouse interaction ---
+                const distanceToMouse = pos.distanceTo(mouseWorld);
+                if (distanceToMouse < mouseRepelStrength) {
+                    const repelForce = (mouseRepelStrength - distanceToMouse) / mouseRepelStrength;
+                    const repelVector = new THREE.Vector3().subVectors(pos, mouseWorld).normalize();
+                    pData.velocity.add(repelVector.multiplyScalar(repelForce * 0.5));
+                }
+
+                // --- Damping and applying velocity ---
+                pData.velocity.multiplyScalar(0.96); // Friction/damping to prevent infinite speed
+                positions[i3] += pData.velocity.x;
+                positions[i3 + 1] += pData.velocity.y;
+                positions[i3 + 2] += pData.velocity.z;
+            }
+
+            // Mark the position attribute as needing an update
+            particles.geometry.attributes.position.needsUpdate = true;
+            
+            // Rotate the entire particle system for a cosmic feel
+            particles.rotation.y = elapsedTime * 0.05;
+            particles.rotation.x = elapsedTime * 0.02;
+
+            renderer.render(scene, camera);
+        }
+
+        // --- RESIZE HANDLER ---
+        window.addEventListener('resize', () => {
+            // Update camera aspect ratio
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            // Update renderer size
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+        });
+
+        // Start the animation
+        animate();
+    </script>
+</body>
+</html>
