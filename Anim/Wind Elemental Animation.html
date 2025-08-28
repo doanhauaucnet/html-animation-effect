@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wind Elemental Animation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the animation canvas */
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevents scrollbars from appearing */
+            background-color: #020617; /* A deep, dark blue background */
+            font-family: 'Inter', sans-serif;
+        }
+
+        canvas {
+            display: block; /* Removes default canvas spacing */
+        }
+        
+        /* Info box styling */
+        .info-box {
+            position: absolute;
+            top: 1.5rem; /* 24px */
+            left: 1.5rem; /* 24px */
+            padding: 1rem; /* 16px */
+            background-color: rgba(15, 23, 42, 0.8); /* Semi-transparent slate-900 */
+            border: 1px solid rgba(51, 65, 85, 0.5); /* slate-700 */
+            border-radius: 0.75rem; /* 12px */
+            color: #e2e8f0; /* slate-200 */
+            max-width: 320px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="bg-slate-950">
+    
+    <!-- The canvas element where the animation will be drawn -->
+    <canvas id="windCanvas"></canvas>
+
+    <!-- Informational overlay -->
+    <div class="info-box shadow-lg">
+        <h1 class="text-lg font-bold text-slate-100">Wind Elemental</h1>
+        <p class="text-sm text-slate-300 mt-2">Move your mouse to guide the flow of the wind. The elemental spirit will follow your lead.</p>
+    </div>
+
+    <script>
+        // --- Canvas and Context Setup ---
+        const canvas = document.getElementById('windCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set initial canvas dimensions
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // --- Configuration ---
+        const PARTICLE_COUNT = 500; // Number of particles to animate
+        const PARTICLE_SPEED = 0.5;   // Base speed of particles
+        const MOUSE_INFLUENCE = 50; // How strongly the mouse attracts particles
+        const FADE_RATE = 0.03;     // How quickly the trails fade
+
+        // --- Mouse Tracking ---
+        const mouse = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 150 // The radius of influence around the mouse
+        };
+
+        // Update mouse coordinates on move
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = event.x;
+            mouse.y = event.y;
+        });
+        
+        // Reset mouse position when it leaves the window to prevent particles from getting stuck
+        window.addEventListener('mouseout', () => {
+            mouse.x = undefined;
+            mouse.y = undefined;
+        });
+
+        // --- Particle System ---
+        let particlesArray = [];
+
+        // Particle class defines the properties and behavior of each particle
+        class Particle {
+            constructor() {
+                // Start at a random position
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                // Random size for variety
+                this.size = Math.random() * 2 + 1;
+                // Base speed and direction
+                this.speedX = (Math.random() * 2 - 1) * PARTICLE_SPEED;
+                this.speedY = (Math.random() * 2 - 1) * PARTICLE_SPEED;
+                // Color from a cool palette
+                this.color = `hsl(${Math.random() * 60 + 180}, 100%, 70%)`; // Hues from cyan to blue
+            }
+
+            // Update particle's position and handle interactions
+            update() {
+                // Calculate distance from the mouse
+                const dx = mouse.x - this.x;
+                const dy = mouse.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // If the particle is within the mouse's influence radius
+                if (distance < mouse.radius && mouse.x !== undefined) {
+                    const forceDirectionX = dx / distance;
+                    const forceDirectionY = dy / distance;
+                    // The closer the particle, the stronger the pull
+                    const force = (mouse.radius - distance) / mouse.radius;
+                    // Apply the force to the particle's speed
+                    this.speedX += forceDirectionX * force * MOUSE_INFLUENCE * 0.05;
+                    this.speedY += forceDirectionY * force * MOUSE_INFLUENCE * 0.05;
+                }
+                
+                // Apply a bit of friction/drag to slow them down over time
+                this.speedX *= 0.98;
+                this.speedY *= 0.98;
+
+                // Move the particle
+                this.x += this.speedX;
+                this.y += this.speedY;
+
+                // Handle screen edges (wrap around)
+                if (this.x > canvas.width) this.x = 0;
+                if (this.x < 0) this.x = canvas.width;
+                if (this.y > canvas.height) this.y = 0;
+                if (this.y < 0) this.y = canvas.height;
+            }
+
+            // Draw the particle on the canvas
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // --- Initialization ---
+        function init() {
+            particlesArray = []; // Clear previous particles
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                particlesArray.push(new Particle());
+            }
+        }
+        init(); // Create the initial set of particles
+
+        // --- Animation Loop ---
+        function animate() {
+            // Create a semi-transparent overlay to produce a fading trail effect
+            ctx.fillStyle = `rgba(2, 6, 23, ${FADE_RATE})`; // slate-950 with fade
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Update and draw each particle
+            for (let i = 0; i < particlesArray.length; i++) {
+                particlesArray[i].update();
+                particlesArray[i].draw();
+            }
+
+            // Request the next frame to continue the animation
+            requestAnimationFrame(animate);
+        }
+        animate(); // Start the animation loop
+
+        // --- Event Listeners ---
+        // Handle window resizing to make the animation responsive
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Re-initialize particles to fit the new screen size
+            init();
+        });
+    </script>
+</body>
+</html>
