@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wind Elemental Animation</title>
+    <style>
+        /* Basic CSS reset and styling for the canvas container */
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            width: 100%;
+            background-color: #02041b; /* Deep blue background */
+            font-family: 'Inter', sans-serif; /* Using a clean, modern font */
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        /* Styling for the info text overlay */
+        .info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            text-shadow: 0 0 5px rgba(0,0,0,0.5);
+            pointer-events: none; /* Allows mouse events to pass through to the canvas */
+        }
+    </style>
+    <!-- Google Fonts import for 'Inter' -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- The canvas element where the animation will be drawn -->
+    <canvas id="windCanvas"></canvas>
+    
+    <!-- Simple text overlay to guide the user -->
+    <div class="info">Move your mouse to interact with the wind</div>
+
+    <script>
+        // --- SIMPLEX NOISE IMPLEMENTATION ---
+        // This is a self-contained implementation of Simplex Noise,
+        // which is used to generate the organic, flowing vector field for the wind.
+        const F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
+        const G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+        const F3 = 1.0 / 3.0;
+        const G3 = 1.0 / 6.0;
+
+        class SimplexNoise {
+            constructor(random = Math.random) {
+                this.p = new Uint8Array(256);
+                this.perm = new Uint8Array(512);
+                this.permMod12 = new Uint8Array(512);
+                for (let i = 0; i < 256; i++) {
+                    this.p[i] = i;
+                }
+                this.shuffle(this.p, random);
+                for (let i = 0; i < 512; i++) {
+                    this.perm[i] = this.p[i & 255];
+                    this.permMod12[i] = this.perm[i] % 12;
+                }
+            }
+
+            shuffle(a, random) {
+                for (let i = a.length - 1; i > 0; i--) {
+                    const j = Math.floor(random() * (i + 1));
+                    [a[i], a[j]] = [a[j], a[i]];
+                }
+            }
+
+            noise2D(x, y) {
+                const grad3 = [
+                    [1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0],
+                    [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1],
+                    [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]
+                ];
+                let n0, n1, n2;
+                const s = (x + y) * F2;
+                const i = Math.floor(x + s);
+                const j = Math.floor(y + s);
+                const t = (i + j) * G2;
+                const X0 = i - t;
+                const Y0 = j - t;
+                const x0 = x - X0;
+                const y0 = y - Y0;
+                let i1, j1;
+                if (x0 > y0) {
+                    i1 = 1; j1 = 0;
+                } else {
+                    i1 = 0; j1 = 1;
+                }
+                const x1 = x0 - i1 + G2;
+                const y1 = y0 - j1 + G2;
+                const x2 = x0 - 1.0 + 2.0 * G2;
+                const y2 = y0 - 1.0 + 2.0 * G2;
+                const ii = i & 255;
+                const jj = j & 255;
+                const gi0 = this.permMod12[ii + this.perm[jj]];
+                const gi1 = this.permMod12[ii + i1 + this.perm[jj + j1]];
+                const gi2 = this.permMod12[ii + 1 + this.perm[jj + 1]];
+                let t0 = 0.5 - x0 * x0 - y0 * y0;
+                if (t0 < 0) n0 = 0.0;
+                else {
+                    t0 *= t0;
+                    n0 = t0 * t0 * (grad3[gi0][0] * x0 + grad3[gi0][1] * y0);
+                }
+                let t1 = 0.5 - x1 * x1 - y1 * y1;
+                if (t1 < 0) n1 = 0.0;
+                else {
+                    t1 *= t1;
+                    n1 = t1 * t1 * (grad3[gi1][0] * x1 + grad3[gi1][1] * y1);
+                }
+                let t2 = 0.5 - x2 * x2 - y2 * y2;
+                if (t2 < 0) n2 = 0.0;
+                else {
+                    t2 *= t2;
+                    n2 = t2 * t2 * (grad3[gi2][0] * x2 + grad3[gi2][1] * y2);
+                }
+                return 70.0 * (n0 + n1 + n2);
+            }
+        }
+
+        // --- MAIN ANIMATION SCRIPT ---
+        
+        // Get canvas and context
+        const canvas = document.getElementById('windCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Animation parameters
+        const PARTICLE_COUNT = 1500;
+        const PARTICLE_SPEED = 0.8;
+        const NOISE_SCALE = 0.004; // How "zoomed in" the noise field is
+        const MOUSE_INFLUENCE = 50; // Radius of mouse effect
+        const MOUSE_FORCE = 0.8; // Strength of mouse effect
+
+        let particles = [];
+        let width, height;
+        const simplex = new SimplexNoise();
+        let time = 0; // Time variable to evolve the noise field
+
+        // Mouse position object
+        const mouse = {
+            x: null,
+            y: null
+        };
+
+        // Particle class definition
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            // Reset particle to a random position
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = 0;
+                this.vy = 0;
+                this.life = Math.random() * 100 + 50; // Lifespan of the particle
+                this.hue = 180 + Math.random() * 60; // Color hue (blues and cyans)
+            }
+
+            // Update particle position and state
+            update() {
+                this.life--;
+                if (this.life <= 0) {
+                    this.reset();
+                }
+
+                // Get the angle from the noise field
+                const angle = simplex.noise2D(this.x * NOISE_SCALE, this.y * NOISE_SCALE + time) * Math.PI * 2;
+                
+                // Calculate velocity based on angle
+                this.vx = Math.cos(angle) * PARTICLE_SPEED;
+                this.vy = Math.sin(angle) * PARTICLE_SPEED;
+
+                // --- Mouse Interaction ---
+                if (mouse.x !== null && mouse.y !== null) {
+                    const dx = this.x - mouse.x;
+                    const dy = this.y - mouse.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // If particle is within mouse influence radius, push it away
+                    if (dist < MOUSE_INFLUENCE) {
+                        const force = (MOUSE_INFLUENCE - dist) / MOUSE_INFLUENCE * MOUSE_FORCE;
+                        this.vx += (dx / dist) * force;
+                        this.vy += (dy / dist) * force;
+                    }
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Edge wrapping
+                if (this.x > width) this.x = 0;
+                if (this.x < 0) this.x = width;
+                if (this.y > height) this.y = 0;
+                if (this.y < 0) this.y = height;
+            }
+
+            // Draw the particle on the canvas
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 1, 0, Math.PI * 2);
+                ctx.fillStyle = `hsla(${this.hue}, 100%, 75%, 0.8)`;
+                ctx.fill();
+            }
+        }
+
+        // --- SETUP AND ANIMATION LOOP ---
+
+        // Initialize the animation
+        function init() {
+            // Set canvas size to match window
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+
+            // Create particles
+            particles = [];
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        // The main animation loop
+        function animate() {
+            // Create a trailing effect by drawing a semi-transparent rectangle
+            ctx.fillStyle = 'rgba(2, 4, 27, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+
+            // Update and draw each particle
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            // Evolve the noise field over time to make the wind patterns change
+            time += 0.0005;
+
+            // Request the next frame
+            requestAnimationFrame(animate);
+        }
+
+        // --- EVENT LISTENERS ---
+
+        // Handle window resizing
+        window.addEventListener('resize', init);
+
+        // Track mouse movement
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        // Reset mouse position when it leaves the window
+        window.addEventListener('mouseout', () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+
+        // Start the animation
+        init();
+        animate();
+    </script>
+</body>
+</html>
