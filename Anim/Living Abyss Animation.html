@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Living Abyss</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Basic CSS Reset */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Styles for the body to create the abyss environment */
+        body {
+            background-color: #00020a; /* Deep, dark blue-black */
+            overflow: hidden; /* Hide scrollbars */
+            font-family: 'Cinzel', serif;
+            color: #a7d8ff;
+            cursor: none; /* Hide the default cursor */
+        }
+
+        /* Canvas styling to fill the entire viewport */
+        #abyssCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        /* Container for the title text */
+        .title-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 2;
+            pointer-events: none; /* Allow mouse events to pass through to the canvas */
+            user-select: none;
+        }
+
+        h1 {
+            font-size: 5vw;
+            font-weight: 400;
+            letter-spacing: 0.5rem;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(13, 93, 158, 0.8), 0 0 20px rgba(13, 93, 158, 0.6);
+            animation: fadeIn 5s ease-in-out forwards;
+        }
+        
+        p {
+            font-size: 1.2vw;
+            font-weight: 400;
+            letter-spacing: 0.2rem;
+            opacity: 0;
+            text-shadow: 0 0 5px rgba(13, 93, 158, 0.6);
+            animation: fadeIn 5s 1s ease-in-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Custom cursor styling */
+        .cursor-light {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(167, 216, 255, 0.2) 0%, rgba(167, 216, 255, 0) 70%);
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s ease-out;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="title-container">
+        <h1>Abyss</h1>
+        <p>The depths are watching</p>
+    </div>
+    
+    <canvas id="abyssCanvas"></canvas>
+
+    <div class="cursor-light"></div>
+
+    <script>
+        // --- Canvas and Context Setup ---
+        const canvas = document.getElementById('abyssCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        // --- Mouse and Cursor Setup ---
+        const mouse = { x: null, y: null, radius: 100 };
+        const cursorLight = document.querySelector('.cursor-light');
+
+        // --- Animation Entities ---
+        let particles = [];
+        let tendrils = [];
+
+        // --- Helper Functions ---
+        const random = (min, max) => Math.random() * (max - min) + min;
+
+        // Function to resize the canvas to fit the window
+        function resizeCanvas() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        // --- Particle Class ---
+        // Represents the small, floating specks in the water
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = random(0.5, 1.5);
+                this.speedY = random(0.1, 0.5); // Slow upward drift
+                this.color = `rgba(167, 216, 255, ${random(0.2, 0.8)})`;
+                this.baseX = this.x; // Store original x for swaying motion
+                this.sway = Math.random() * Math.PI * 2; // Sway offset
+            }
+
+            // Update particle position
+            update() {
+                this.y -= this.speedY; // Move upwards
+                this.sway += 0.02;
+                this.x = this.baseX + Math.sin(this.sway) * 2; // Gentle side-to-side motion
+
+                // Reset particle if it goes off-screen
+                if (this.y < 0) {
+                    this.y = height + 10;
+                    this.x = Math.random() * width;
+                    this.baseX = this.x;
+                }
+
+                // --- Mouse Interaction ---
+                const dx = this.x - mouse.x;
+                const dy = this.y - mouse.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < mouse.radius) {
+                    const forceDirectionX = dx / distance;
+                    const forceDirectionY = dy / distance;
+                    const force = (mouse.radius - distance) / mouse.radius;
+                    this.x += forceDirectionX * force * 2;
+                    this.y += forceDirectionY * force * 2;
+                }
+            }
+
+            // Draw the particle on the canvas
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        // --- Tendril Class ---
+        // Represents the larger, glowing, jellyfish-like creatures
+        class Tendril {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.segments = [];
+                this.numSegments = random(30, 80);
+                this.segmentLength = random(5, 15);
+                this.angle = random(0, Math.PI * 2);
+                this.speed = random(0.5, 1.5);
+                this.hue = random(180, 220); // Blues and cyans
+                this.life = 1;
+                this.lifeDecay = random(0.0005, 0.001);
+
+                // Create the segments that make up the tendril
+                for (let i = 0; i < this.numSegments; i++) {
+                    this.segments.push({
+                        x: this.x,
+                        y: this.y,
+                    });
+                }
+            }
+            
+            // Update the position of each segment in the tendril
+            update() {
+                this.life -= this.lifeDecay;
+
+                // Add organic, wavy motion
+                this.angle += random(-0.1, 0.1);
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+
+                // Keep tendril within bounds (with some margin)
+                if (this.x < -100 || this.x > width + 100 || this.y < -100 || this.y > height + 100) {
+                    this.life = 0; // Mark for removal
+                }
+
+                // Update segments using inverse kinematics
+                let parent = this;
+                for (let i = 0; i < this.numSegments; i++) {
+                    const segment = this.segments[i];
+                    const dx = segment.x - parent.x;
+                    const dy = segment.y - parent.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const angle = Math.atan2(dy, dx);
+
+                    segment.x = parent.x + Math.cos(angle) * this.segmentLength;
+                    segment.y = parent.y + Math.sin(angle) * this.segmentLength;
+                    
+                    // Mouse interaction for each segment
+                    const mdx = segment.x - mouse.x;
+                    const mdy = segment.y - mouse.y;
+                    const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
+                    if (mDist < mouse.radius) {
+                         const forceDirectionX = mdx / mDist;
+                         const forceDirectionY = mdy / mDist;
+                         const force = (mouse.radius - mDist) / mouse.radius;
+                         segment.x += forceDirectionX * force * 5;
+                         segment.y += forceDirectionY * force * 5;
+                    }
+
+                    parent = segment;
+                }
+            }
+
+            // Draw the tendril on the canvas
+            draw() {
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                for (let i = 1; i < this.numSegments; i++) {
+                    ctx.lineTo(this.segments[i].x, this.segments[i].y);
+                }
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = `hsla(${this.hue}, 100%, 70%, ${this.life * 0.5})`;
+                ctx.shadowColor = `hsla(${this.hue}, 100%, 50%, 1)`;
+                ctx.shadowBlur = 15;
+                ctx.stroke();
+                ctx.shadowBlur = 0; // Reset shadow blur
+            }
+        }
+
+        // --- Initialization Function ---
+        function init() {
+            resizeCanvas();
+            particles = [];
+            tendrils = [];
+            // Create initial particles
+            for (let i = 0; i < 150; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            // Clear the canvas with a semi-transparent fill to create a motion blur/trailing effect
+            ctx.fillStyle = 'rgba(0, 2, 10, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+
+            // Occasionally spawn new tendrils from the edges
+            if (Math.random() < 0.02) {
+                const spawnEdge = Math.floor(random(0, 4));
+                let x, y;
+                switch(spawnEdge) {
+                    case 0: x = random(0, width); y = -20; break; // Top
+                    case 1: x = width + 20; y = random(0, height); break; // Right
+                    case 2: x = random(0, width); y = height + 20; break; // Bottom
+                    case 3: x = -20; y = random(0, height); break; // Left
+                }
+                tendrils.push(new Tendril(x, y));
+            }
+            
+            // Update and draw all particles
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            
+            // Update, draw, and filter out dead tendrils
+            tendrils = tendrils.filter(t => {
+                t.update();
+                t.draw();
+                return t.life > 0;
+            });
+
+            // Request the next frame
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('resize', init);
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.x;
+            mouse.y = e.y;
+            // Move the custom cursor light
+            cursorLight.style.left = e.clientX + 'px';
+            cursorLight.style.top = e.clientY + 'px';
+        });
+
+        window.addEventListener('mouseout', () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+        
+        // --- Start the animation ---
+        init();
+        animate();
+
+    </script>
+</body>
+</html>
