@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Elemental Animation</title>
+    <style>
+        /* Basic CSS to make the canvas fill the entire screen */
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #020a17; /* Deep dark blue background */
+            font-family: 'Inter', sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        /* Style for the title text */
+        .title-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 3rem;
+            font-weight: 300;
+            text-align: center;
+            pointer-events: none; /* Allows mouse events to pass through to the canvas */
+            text-shadow: 0 0 15px rgba(100, 200, 255, 0.5);
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="title-text">Water Elemental</div>
+    <canvas id="waterCanvas"></canvas>
+
+    <script>
+        // --- Canvas and Context Setup ---
+        const canvas = document.getElementById('waterCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        // --- Mouse Interaction ---
+        const mouse = {
+            x: width / 2,
+            y: height / 2,
+            radius: 100 // Area of effect around the mouse
+        };
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            mouse.x = event.clientX;
+            mouse.y = event.clientY;
+        });
+        
+        // Reset mouse position when it leaves the canvas to stop interaction
+        canvas.addEventListener('mouseleave', () => {
+            mouse.x = undefined;
+            mouse.y = undefined;
+        });
+
+        // --- Particle System ---
+        const particlesArray = [];
+        const numberOfParticles = 250;
+        // Palette of water-like colors
+        const colorPalette = [
+            '#00A7E1', // Bright Blue
+            '#A6E1FA', // Light Cyan
+            '#0074E1', // Deep Blue
+            '#F2FFFF', // Almost White
+            '#7AE5F5'  // Aqua
+        ];
+
+        // Particle class to define individual particle behavior
+        class Particle {
+            constructor() {
+                // Start particles near the center
+                this.x = Math.random() * (width / 4) + (width / 2) - (width / 8);
+                this.y = Math.random() * (height / 4) + (height / 2) - (height / 8);
+                this.radius = Math.random() * 6 + 1; // Varying sizes
+                this.baseRadius = this.radius;
+                this.color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+                
+                // Store original position to return to
+                this.density = (Math.random() * 30) + 10; // How far particles are pushed by mouse
+                this.baseX = this.x;
+                this.baseY = this.y;
+
+                // Velocity and movement properties
+                this.angle = Math.random() * Math.PI * 2;
+                this.speed = Math.random() * 0.03 + 0.01;
+                this.orbitRadius = Math.random() * 150 + 50;
+            }
+
+            // Update particle position each frame
+            update() {
+                // --- Mouse Interaction Logic ---
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                let forceDirectionX = dx / distance;
+                let forceDirectionY = dy / distance;
+                let maxDistance = mouse.radius;
+                // Force is stronger the closer the particle is to the mouse
+                let force = (maxDistance - distance) / maxDistance;
+
+                if (distance < mouse.radius) {
+                    // Push particle away from the mouse
+                    this.x -= forceDirectionX * force * this.density;
+                    this.y -= forceDirectionY * force * this.density;
+                    // Make particle glow when near mouse
+                    this.radius = this.baseRadius * 2.5;
+                } else {
+                    // --- Fluid Movement Logic ---
+                    // Return to base position if far from mouse
+                    if (this.x !== this.baseX) {
+                        let dx_base = this.x - this.baseX;
+                        this.x -= dx_base / 20;
+                    }
+                    if (this.y !== this.baseY) {
+                        let dy_base = this.y - this.baseY;
+                        this.y -= dy_base / 20;
+                    }
+                    // Return to base size
+                    if (this.radius > this.baseRadius) {
+                        this.radius -= 0.1;
+                    }
+                }
+                
+                // --- Swirling Animation ---
+                // Update angle for circular motion
+                this.angle += this.speed;
+                // Calculate new position based on a swirling, organic path
+                this.x += Math.sin(this.angle) * 0.5;
+                this.y += Math.cos(this.angle * 0.75) * 0.5; // Use different multipliers for more complex paths
+
+                // Boundary check to keep particles on screen
+                if (this.x < 0) this.x = width;
+                if (this.x > width) this.x = 0;
+                if (this.y < 0) this.y = height;
+                if (this.y > height) this.y = 0;
+            }
+
+            // Draw the particle on the canvas
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = 0.8; // Semi-transparent for a watery feel
+                
+                // Add a glow effect
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                
+                ctx.fill();
+                ctx.closePath();
+            }
+        }
+
+        // --- Initialization and Animation Loop ---
+        function init() {
+            particlesArray.length = 0; // Clear array
+            for (let i = 0; i < numberOfParticles; i++) {
+                particlesArray.push(new Particle());
+            }
+        }
+
+        function animate() {
+            // Clear the canvas with a semi-transparent color to create motion trails
+            ctx.fillStyle = 'rgba(2, 10, 23, 0.15)';
+            ctx.fillRect(0, 0, width, height);
+
+            // Update and draw each particle
+            for (let i = 0; i < particlesArray.length; i++) {
+                particlesArray[i].update();
+                particlesArray[i].draw();
+            }
+            
+            // Reset shadow properties for the next frame
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1.0;
+
+            // Loop the animation
+            requestAnimationFrame(animate);
+        }
+
+        // Start the animation
+        init();
+        animate();
+    </script>
+</body>
+</html>
