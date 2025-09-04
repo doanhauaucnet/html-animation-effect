@@ -11,6 +11,7 @@
             background-color: #000;
             font-family: 'Inter', sans-serif;
             color: white;
+            cursor: pointer;
         }
         canvas {
             display: block;
@@ -44,7 +45,7 @@
 <body>
     <div class="info">
         <h1>Cybernetic Synapses</h1>
-        <p>Move your mouse to activate the network.</p>
+        <p>Move mouse to energize. Click near nodes for a particle burst.</p>
     </div>
     <canvas id="mainCanvas"></canvas>
 
@@ -65,10 +66,12 @@
         const config = {
             nodeCount: 100,
             nodeBaseRadius: 2,
+            nodeDriftSpeed: 0.05, // Reduced drift speed
             maxNeighborConnections: 3,
+            maxConnectionDistance: 150, // Max distance to form a connection
             particleSpeed: 1,
             particleRadius: 1.5,
-            particleTTL: 100, // Time to live in frames
+            particleAcceleration: 5, // How much to speed up when connection breaks
             baseColor: { h: 180, s: 100, l: 60 }, // Cyan
             mouseColor: { h: 300, s: 100, l: 60 }, // Magenta
         };
@@ -77,6 +80,8 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
+                this.vx = (Math.random() - 0.5) * config.nodeDriftSpeed;
+                this.vy = (Math.random() - 0.5) * config.nodeDriftSpeed;
                 this.radius = config.nodeBaseRadius * (Math.random() * 0.5 + 0.5);
                 this.neighbors = [];
                 this.energy = 0;
@@ -108,19 +113,14 @@
                 if (this.energy > 0) {
                     this.energy -= 0.5;
                 }
-            }
+                
+                // Move the node
+                this.x += this.vx;
+                this.y += this.vy;
 
-            findNeighbors(allNodes) {
-                let distances = [];
-                for (let otherNode of allNodes) {
-                    if (this === otherNode) continue;
-                    const dx = this.x - otherNode.x;
-                    const dy = this.y - otherNode.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    distances.push({ node: otherNode, dist: dist });
-                }
-                distances.sort((a, b) => a.dist - b.dist);
-                this.neighbors = distances.slice(0, config.maxNeighborConnections).map(d => d.node);
+                // Boundary check to keep nodes on screen
+                if (this.x <= 0 || this.x >= width) this.vx *= -1;
+                if (this.y <= 0 || this.y >= height) this.vy *= -1;
             }
         }
 
@@ -132,7 +132,6 @@
                 this.y = startNode.y;
                 this.progress = 0; // 0 to 1
                 this.speed = (Math.random() * 0.5 + 0.5) * config.particleSpeed;
-                this.ttl = config.particleTTL;
                 this.isDead = false;
                 this.color = startNode.color;
             }
@@ -145,9 +144,20 @@
                 
                 const dx = this.endNode.x - this.startNode.x;
                 const dy = this.endNode.y - this.startNode.y;
-                const distance = Math.sqrt(dx*dx + dy*dy);
+                const distance = Math.hypot(dx, dy);
 
-                this.progress += (this.speed / distance);
+                let currentSpeed = this.speed;
+                // If nodes are moving apart, accelerate to destination before connection breaks
+                if (distance > config.maxConnectionDistance) {
+                    currentSpeed *= config.particleAcceleration;
+                }
+
+                if (distance > 0) {
+                    this.progress += (currentSpeed / distance);
+                } else {
+                    this.isDead = true; // Avoid division by zero if nodes overlap
+                    return;
+                }
 
                 this.x = this.startNode.x + dx * this.progress;
                 this.y = this.startNode.y + dy * this.progress;
@@ -173,6 +183,23 @@
             }
         }
         
+        function updateNeighbors() {
+            for (const node of nodes) {
+                let potentialNeighbors = [];
+                for (const otherNode of nodes) {
+                    if (node === otherNode) continue;
+                    const dist = Math.hypot(node.x - otherNode.x, node.y - otherNode.y);
+
+                    if (dist < config.maxConnectionDistance) {
+                        potentialNeighbors.push({ node: otherNode, dist: dist });
+                    }
+                }
+                // Sort by distance and take the closest ones up to the max connection count
+                potentialNeighbors.sort((a, b) => a.dist - b.dist);
+                node.neighbors = potentialNeighbors.slice(0, config.maxNeighborConnections).map(p => p.node);
+            }
+        }
+
         // --- Initialization ---
         function init() {
             width = canvas.width = window.innerWidth;
@@ -185,11 +212,9 @@
             for (let i = 0; i < config.nodeCount; i++) {
                 nodes.push(new Node(Math.random() * width, Math.random() * height));
             }
-
-            // For each node, find its closest neighbors
-            for (let node of nodes) {
-                node.findNeighbors(nodes);
-            }
+            
+            // Calculate initial neighbors
+            updateNeighbors();
             
             // Initial burst of particles
             for(let i=0; i< config.nodeCount / 2; i++) {
@@ -199,9 +224,19 @@
         
         function spawnParticle() {
             if (nodes.length > 0) {
-                const randomNode = nodes[Math.floor(Math.random() * nodes.length)];
-                if (randomNode.neighbors.length > 0) {
-                    particles.push(new Particle(randomNode));
+                // Find a node that has connections to spawn from
+                let spawnNode = null;
+                let attempts = 0;
+                while(!spawnNode && attempts < nodes.length) {
+                    let randomNode = nodes[Math.floor(Math.random() * nodes.length)];
+                    if (randomNode.neighbors.length > 0) {
+                        spawnNode = randomNode;
+                    }
+                    attempts++;
+                }
+
+                if (spawnNode) {
+                    particles.push(new Particle(spawnNode));
                 }
             }
         }
@@ -212,11 +247,21 @@
             ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
             ctx.fillRect(0, 0, width, height);
             
-            // Draw connections
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
+            // Evolve color over time, very slowly
+            config.baseColor.h = (config.baseColor.h + 0.02) % 360;
+
+            // Dynamically find neighbors on each frame
+            updateNeighbors();
+            
+            // Draw pulsating connections
             ctx.lineWidth = 0.5;
             for (const node of nodes) {
                 for (const neighbor of node.neighbors) {
+                    const energyRatio = Math.min(1, (node.energy + neighbor.energy) / (node.maxEnergy * 1.5));
+                    const opacity = 0.05 + energyRatio * 0.5;
+                    const lightness = 40 + energyRatio * 30; // Brighter when energetic
+                    ctx.strokeStyle = `hsla(${config.baseColor.h}, ${config.baseColor.s}%, ${lightness}%, ${opacity})`;
+
                     ctx.beginPath();
                     ctx.moveTo(node.x, node.y);
                     ctx.lineTo(neighbor.x, neighbor.y);
@@ -270,9 +315,35 @@
             mouse.y = undefined;
         });
 
+        window.addEventListener('click', (event) => {
+            let closestNode = null;
+            let minDistance = Infinity;
+
+            for (const node of nodes) {
+                const dx = node.x - event.x;
+                const dy = node.y - event.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestNode = node;
+                }
+            }
+
+            if (closestNode && minDistance < 100) { // Only burst if click is near a node
+                closestNode.energy = closestNode.maxEnergy;
+                const burstAmount = closestNode.neighbors.length * 3; // Increased burst
+                for (let i = 0; i < burstAmount; i++) {
+                     if (closestNode.neighbors.length > 0) {
+                        particles.push(new Particle(closestNode));
+                    }
+                }
+            }
+        });
+
         // --- Start ---
         init();
         animate();
     </script>
 </body>
 </html>
+
