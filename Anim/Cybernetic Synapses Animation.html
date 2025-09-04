@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cybernetic Synapses</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Inter', sans-serif;
+            color: white;
+        }
+        canvas {
+            display: block;
+        }
+        .info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 10px 15px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 14px;
+            pointer-events: none;
+        }
+        .info h1 {
+            font-size: 1.2rem;
+            margin: 0 0 5px 0;
+            color: #00ffff;
+        }
+        .info p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="info">
+        <h1>Cybernetic Synapses</h1>
+        <p>Move your mouse to activate the network.</p>
+    </div>
+    <canvas id="mainCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let nodes = [];
+        let particles = [];
+        let mouse = {
+            x: undefined,
+            y: undefined,
+            radius: 150
+        };
+
+        // --- Configuration ---
+        const config = {
+            nodeCount: 100,
+            nodeBaseRadius: 2,
+            maxNeighborConnections: 3,
+            particleSpeed: 1,
+            particleRadius: 1.5,
+            particleTTL: 100, // Time to live in frames
+            baseColor: { h: 180, s: 100, l: 60 }, // Cyan
+            mouseColor: { h: 300, s: 100, l: 60 }, // Magenta
+        };
+
+        class Node {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = config.nodeBaseRadius * (Math.random() * 0.5 + 0.5);
+                this.neighbors = [];
+                this.energy = 0;
+                this.maxEnergy = 50;
+                this.color = `hsl(${config.baseColor.h}, ${config.baseColor.s}%, ${config.baseColor.l}%)`;
+            }
+
+            draw() {
+                // Determine glow and radius based on energy
+                const glow = Math.min(this.energy, this.maxEnergy);
+                const currentRadius = this.radius + glow * 0.1;
+                
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, currentRadius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                
+                // Glow effect
+                ctx.shadowBlur = glow;
+                ctx.shadowColor = this.color;
+                
+                ctx.fill();
+
+                // Reset shadow for other elements
+                ctx.shadowBlur = 0;
+            }
+            
+            update() {
+                // Energy decay
+                if (this.energy > 0) {
+                    this.energy -= 0.5;
+                }
+            }
+
+            findNeighbors(allNodes) {
+                let distances = [];
+                for (let otherNode of allNodes) {
+                    if (this === otherNode) continue;
+                    const dx = this.x - otherNode.x;
+                    const dy = this.y - otherNode.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    distances.push({ node: otherNode, dist: dist });
+                }
+                distances.sort((a, b) => a.dist - b.dist);
+                this.neighbors = distances.slice(0, config.maxNeighborConnections).map(d => d.node);
+            }
+        }
+
+        class Particle {
+            constructor(startNode) {
+                this.startNode = startNode;
+                this.endNode = startNode.neighbors[Math.floor(Math.random() * startNode.neighbors.length)];
+                this.x = startNode.x;
+                this.y = startNode.y;
+                this.progress = 0; // 0 to 1
+                this.speed = (Math.random() * 0.5 + 0.5) * config.particleSpeed;
+                this.ttl = config.particleTTL;
+                this.isDead = false;
+                this.color = startNode.color;
+            }
+
+            update() {
+                if (!this.endNode) {
+                    this.isDead = true;
+                    return;
+                }
+                
+                const dx = this.endNode.x - this.startNode.x;
+                const dy = this.endNode.y - this.startNode.y;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+
+                this.progress += (this.speed / distance);
+
+                this.x = this.startNode.x + dx * this.progress;
+                this.y = this.startNode.y + dy * this.progress;
+                
+                // When particle reaches its destination
+                if (this.progress >= 1) {
+                    this.endNode.energy = Math.min(this.endNode.maxEnergy, this.endNode.energy + 25);
+                    this.isDead = true;
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, config.particleRadius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                
+                ctx.fill();
+                
+                ctx.shadowBlur = 0;
+            }
+        }
+        
+        // --- Initialization ---
+        function init() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            
+            nodes = [];
+            particles = [];
+
+            // Create nodes at random positions
+            for (let i = 0; i < config.nodeCount; i++) {
+                nodes.push(new Node(Math.random() * width, Math.random() * height));
+            }
+
+            // For each node, find its closest neighbors
+            for (let node of nodes) {
+                node.findNeighbors(nodes);
+            }
+            
+            // Initial burst of particles
+            for(let i=0; i< config.nodeCount / 2; i++) {
+                spawnParticle();
+            }
+        }
+        
+        function spawnParticle() {
+            if (nodes.length > 0) {
+                const randomNode = nodes[Math.floor(Math.random() * nodes.length)];
+                if (randomNode.neighbors.length > 0) {
+                    particles.push(new Particle(randomNode));
+                }
+            }
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            // Use a semi-transparent background for a motion blur effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw connections
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
+            ctx.lineWidth = 0.5;
+            for (const node of nodes) {
+                for (const neighbor of node.neighbors) {
+                    ctx.beginPath();
+                    ctx.moveTo(node.x, node.y);
+                    ctx.lineTo(neighbor.x, neighbor.y);
+                    ctx.stroke();
+                }
+            }
+            
+            // Update and draw nodes, checking for mouse interaction
+            for (const node of nodes) {
+                const dx = node.x - mouse.x;
+                const dy = node.y - mouse.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist < mouse.radius) {
+                    // Energize node when mouse is near
+                    node.energy = Math.min(node.maxEnergy, node.energy + 5);
+                    node.color = `hsl(${config.mouseColor.h}, ${config.mouseColor.s}%, ${config.mouseColor.l}%)`;
+                } else {
+                    node.color = `hsl(${config.baseColor.h}, ${config.baseColor.s}%, ${config.baseColor.l}%)`;
+                }
+                
+                node.update();
+                node.draw();
+            }
+            
+            // Update and draw particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw();
+                if (p.isDead) {
+                    particles.splice(i, 1);
+                    // Spawn a new particle to keep the animation alive
+                    spawnParticle();
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('resize', init);
+        
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = event.x;
+            mouse.y = event.y;
+        });
+        
+        window.addEventListener('mouseout', () => {
+            mouse.x = undefined;
+            mouse.y = undefined;
+        });
+
+        // --- Start ---
+        init();
+        animate();
+    </script>
+</body>
+</html>
