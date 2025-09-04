@@ -74,14 +74,18 @@
             particleAcceleration: 5, // How much to speed up when connection breaks
             baseColor: { h: 180, s: 100, l: 60 }, // Cyan
             mouseColor: { h: 300, s: 100, l: 60 }, // Magenta
+            focalLength: 300, // Affects the perspective strength
+            depth: 300, // The depth of the 3D space
         };
 
         class Node {
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
+                this.z = Math.random() * config.depth;
                 this.vx = (Math.random() - 0.5) * config.nodeDriftSpeed;
                 this.vy = (Math.random() - 0.5) * config.nodeDriftSpeed;
+                this.vz = (Math.random() - 0.5) * config.nodeDriftSpeed;
                 this.radius = config.nodeBaseRadius * (Math.random() * 0.5 + 0.5);
                 this.neighbors = [];
                 this.energy = 0;
@@ -89,23 +93,33 @@
                 this.color = `hsl(${config.baseColor.h}, ${config.baseColor.s}%, ${config.baseColor.l}%)`;
             }
 
+            project() {
+                const scale = config.focalLength / (config.focalLength + this.z);
+                const projectedX = (this.x - width / 2) * scale + width / 2;
+                const projectedY = (this.y - height / 2) * scale + height / 2;
+                return { x: projectedX, y: projectedY, scale: scale };
+            }
+
             draw() {
-                // Determine glow and radius based on energy
-                const glow = Math.min(this.energy, this.maxEnergy);
-                const currentRadius = this.radius + glow * 0.1;
+                const proj = this.project();
+                if (proj.x < 0 || proj.x > width || proj.y < 0 || proj.y > height) return;
+
+                const projectedRadius = this.radius * proj.scale;
+                const glow = Math.min(this.energy, this.maxEnergy) * proj.scale;
+                const currentRadius = projectedRadius + glow * 0.1;
                 
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, currentRadius, 0, Math.PI * 2);
+                ctx.arc(proj.x, proj.y, currentRadius, 0, Math.PI * 2);
                 ctx.fillStyle = this.color;
+                ctx.globalAlpha = proj.scale * 0.8 + 0.2;
                 
-                // Glow effect
                 ctx.shadowBlur = glow;
                 ctx.shadowColor = this.color;
                 
                 ctx.fill();
 
-                // Reset shadow for other elements
                 ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
             }
             
             update() {
@@ -114,13 +128,15 @@
                     this.energy -= 0.5;
                 }
                 
-                // Move the node
+                // Move the node in 3D
                 this.x += this.vx;
                 this.y += this.vy;
+                this.z += this.vz;
 
-                // Boundary check to keep nodes on screen
+                // Boundary check
                 if (this.x <= 0 || this.x >= width) this.vx *= -1;
                 if (this.y <= 0 || this.y >= height) this.vy *= -1;
+                if (this.z <= 0 || this.z >= config.depth) this.vz *= -1;
             }
         }
 
@@ -130,6 +146,7 @@
                 this.endNode = startNode.neighbors[Math.floor(Math.random() * startNode.neighbors.length)];
                 this.x = startNode.x;
                 this.y = startNode.y;
+                this.z = startNode.z;
                 this.progress = 0; // 0 to 1
                 this.speed = (Math.random() * 0.5 + 0.5) * config.particleSpeed;
                 this.isDead = false;
@@ -144,10 +161,10 @@
                 
                 const dx = this.endNode.x - this.startNode.x;
                 const dy = this.endNode.y - this.startNode.y;
-                const distance = Math.hypot(dx, dy);
+                const dz = this.endNode.z - this.startNode.z;
+                const distance = Math.hypot(dx, dy, dz);
 
                 let currentSpeed = this.speed;
-                // If nodes are moving apart, accelerate to destination before connection breaks
                 if (distance > config.maxConnectionDistance) {
                     currentSpeed *= config.particleAcceleration;
                 }
@@ -155,14 +172,14 @@
                 if (distance > 0) {
                     this.progress += (currentSpeed / distance);
                 } else {
-                    this.isDead = true; // Avoid division by zero if nodes overlap
+                    this.isDead = true;
                     return;
                 }
 
                 this.x = this.startNode.x + dx * this.progress;
                 this.y = this.startNode.y + dy * this.progress;
+                this.z = this.startNode.z + dz * this.progress;
                 
-                // When particle reaches its destination
                 if (this.progress >= 1) {
                     this.endNode.energy = Math.min(this.endNode.maxEnergy, this.endNode.energy + 25);
                     this.isDead = true;
@@ -170,16 +187,23 @@
             }
 
             draw() {
+                const scale = config.focalLength / (config.focalLength + this.z);
+                const projectedX = (this.x - width / 2) * scale + width / 2;
+                const projectedY = (this.y - height / 2) * scale + height / 2;
+                const projectedRadius = config.particleRadius * scale;
+
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, config.particleRadius, 0, Math.PI * 2);
+                ctx.arc(projectedX, projectedY, projectedRadius, 0, Math.PI * 2);
                 ctx.fillStyle = this.color;
+                ctx.globalAlpha = scale * 0.8 + 0.2;
                 
-                ctx.shadowBlur = 10;
+                ctx.shadowBlur = 10 * scale;
                 ctx.shadowColor = this.color;
                 
                 ctx.fill();
                 
                 ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
             }
         }
         
@@ -188,13 +212,12 @@
                 let potentialNeighbors = [];
                 for (const otherNode of nodes) {
                     if (node === otherNode) continue;
-                    const dist = Math.hypot(node.x - otherNode.x, node.y - otherNode.y);
+                    const dist = Math.hypot(node.x - otherNode.x, node.y - otherNode.y, node.z - otherNode.z);
 
                     if (dist < config.maxConnectionDistance) {
                         potentialNeighbors.push({ node: otherNode, dist: dist });
                     }
                 }
-                // Sort by distance and take the closest ones up to the max connection count
                 potentialNeighbors.sort((a, b) => a.dist - b.dist);
                 node.neighbors = potentialNeighbors.slice(0, config.maxNeighborConnections).map(p => p.node);
             }
@@ -208,15 +231,12 @@
             nodes = [];
             particles = [];
 
-            // Create nodes at random positions
             for (let i = 0; i < config.nodeCount; i++) {
                 nodes.push(new Node(Math.random() * width, Math.random() * height));
             }
             
-            // Calculate initial neighbors
             updateNeighbors();
             
-            // Initial burst of particles
             for(let i=0; i< config.nodeCount / 2; i++) {
                 spawnParticle();
             }
@@ -224,7 +244,6 @@
         
         function spawnParticle() {
             if (nodes.length > 0) {
-                // Find a node that has connections to spawn from
                 let spawnNode = null;
                 let attempts = 0;
                 while(!spawnNode && attempts < nodes.length) {
@@ -243,40 +262,41 @@
 
         // --- Animation Loop ---
         function animate() {
-            // Use a semi-transparent background for a motion blur effect
             ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
             ctx.fillRect(0, 0, width, height);
             
-            // Evolve color over time, very slowly
             config.baseColor.h = (config.baseColor.h + 0.02) % 360;
 
-            // Dynamically find neighbors on each frame
             updateNeighbors();
             
-            // Draw pulsating connections
-            ctx.lineWidth = 0.5;
+            // Draw connections
             for (const node of nodes) {
+                const proj1 = node.project();
                 for (const neighbor of node.neighbors) {
+                    const proj2 = neighbor.project();
+                    
+                    const avgScale = (proj1.scale + proj2.scale) / 2;
                     const energyRatio = Math.min(1, (node.energy + neighbor.energy) / (node.maxEnergy * 1.5));
-                    const opacity = 0.05 + energyRatio * 0.5;
-                    const lightness = 40 + energyRatio * 30; // Brighter when energetic
-                    ctx.strokeStyle = `hsla(${config.baseColor.h}, ${config.baseColor.s}%, ${lightness}%, ${opacity})`;
-
+                    const opacity = (0.05 + energyRatio * 0.5) * avgScale;
+                    const lightness = 40 + energyRatio * 30;
+                    
                     ctx.beginPath();
-                    ctx.moveTo(node.x, node.y);
-                    ctx.lineTo(neighbor.x, neighbor.y);
+                    ctx.strokeStyle = `hsla(${config.baseColor.h}, ${config.baseColor.s}%, ${lightness}%, ${opacity})`;
+                    ctx.lineWidth = 0.5 * avgScale;
+                    ctx.moveTo(proj1.x, proj1.y);
+                    ctx.lineTo(proj2.x, proj2.y);
                     ctx.stroke();
                 }
             }
             
-            // Update and draw nodes, checking for mouse interaction
+            // Update and draw nodes
             for (const node of nodes) {
-                const dx = node.x - mouse.x;
-                const dy = node.y - mouse.y;
+                const proj = node.project();
+                const dx = proj.x - mouse.x;
+                const dy = proj.y - mouse.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 
-                if (dist < mouse.radius) {
-                    // Energize node when mouse is near
+                if (mouse.x && dist < mouse.radius * proj.scale) {
                     node.energy = Math.min(node.maxEnergy, node.energy + 5);
                     node.color = `hsl(${config.mouseColor.h}, ${config.mouseColor.s}%, ${config.mouseColor.l}%)`;
                 } else {
@@ -294,7 +314,6 @@
                 p.draw();
                 if (p.isDead) {
                     particles.splice(i, 1);
-                    // Spawn a new particle to keep the animation alive
                     spawnParticle();
                 }
             }
@@ -320,8 +339,9 @@
             let minDistance = Infinity;
 
             for (const node of nodes) {
-                const dx = node.x - event.x;
-                const dy = node.y - event.y;
+                const proj = node.project();
+                const dx = proj.x - event.x;
+                const dy = proj.y - event.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < minDistance) {
                     minDistance = dist;
@@ -329,9 +349,9 @@
                 }
             }
 
-            if (closestNode && minDistance < 100) { // Only burst if click is near a node
+            if (closestNode && minDistance < 100) { 
                 closestNode.energy = closestNode.maxEnergy;
-                const burstAmount = closestNode.neighbors.length * 3; // Increased burst
+                const burstAmount = closestNode.neighbors.length * 3;
                 for (let i = 0; i < burstAmount; i++) {
                      if (closestNode.neighbors.length > 0) {
                         particles.push(new Particle(closestNode));
