@@ -66,7 +66,7 @@
             shapesPerRing: 20,
             shapeSize: 5,
             baseRotationSpeed: 0.001,
-            particleCount: 150, // Reduced count, all kaleidoscopic
+            particleCount: 20,
         };
         const baseRadiusIncrement = config.radiusIncrement;
 
@@ -86,12 +86,41 @@
                 this.vy = Math.sin(moveAngle) * this.speed;
             }
 
-            update() {
+            update(shapes) {
                 this.x += this.vx;
                 this.y += this.vy;
 
-                const dist = Math.sqrt(Math.pow(this.x - width / 2, 2) + Math.pow(this.y - height / 2, 2));
-                if (dist > Math.max(width, height) / 1.8) {
+                // --- MODIFIED --- Changed physics from bounce to deflection
+                for (const shapePos of shapes) {
+                    const dx = this.x - shapePos.x;
+                    const dy = this.y - shapePos.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const collisionDist = config.shapeSize * 2.5; // Collision radius
+
+                    if (dist < collisionDist) {
+                        // Nudge the particle instead of a hard bounce
+                        const normalX = dx / dist;
+                        const normalY = dy / dist;
+                        
+                        // Add a gentle push away from the shape's center
+                        const nudgeStrength = 0.01; 
+                        this.vx += normalX * nudgeStrength;
+                        this.vy += normalY * nudgeStrength;
+
+                        // Re-normalize speed to prevent particles from accelerating indefinitely
+                        const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                        if (currentSpeed > this.speed * 1.5) { // Cap the speed
+                            this.vx = (this.vx / currentSpeed) * this.speed;
+                            this.vy = (this.vy / currentSpeed) * this.speed;
+                        }
+                        
+                        break; // Only handle one collision per frame for performance
+                    }
+                }
+
+
+                const travelDist = Math.sqrt(Math.pow(this.x - width / 2, 2) + Math.pow(this.y - height / 2, 2));
+                if (travelDist > Math.max(width, height) / 1.8) {
                     this.reset();
                 }
             }
@@ -145,8 +174,8 @@
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist > this.radius - 20 && dist < this.radius + 20) {
                         const angle = Math.atan2(dy, dx);
-                        p.vx += Math.cos(angle) * this.alpha * 1.5;
-                        p.vy += Math.sin(angle) * this.alpha * 1.5;
+                        p.vx += Math.cos(angle) * this.alpha * 4;
+                        p.vy += Math.sin(angle) * this.alpha * 4;
                     }
                 });
             }
@@ -175,6 +204,31 @@
 
             update(mouseInfluence) {
                 this.angle += this.rotationSpeed * mouseInfluence;
+            }
+
+            // --- NEW METHOD --- Calculates absolute screen positions of each shape
+            getShapePositions() {
+                const positions = [];
+                const breathFactor = Math.sin(breathTime + this.baseRadius * 0.05) * 5;
+                const displayRadius = this.radius + breathFactor;
+                const warpScale = (warpState === 'collapsing') ? (1-warpProgress) : (warpState === 'expanding' ? warpProgress : 1);
+                
+                const cosRingAngle = Math.cos(this.angle);
+                const sinRingAngle = Math.sin(this.angle);
+
+                for (let i = 0; i < this.shapeCount; i++) {
+                    const angleStep = (Math.PI * 2) / this.shapeCount;
+                    const currentAngle = i * angleStep;
+                    
+                    const localX = Math.cos(currentAngle) * displayRadius * warpScale;
+                    const localY = Math.sin(currentAngle) * displayRadius * warpScale;
+                    
+                    const rotatedX = localX * cosRingAngle - localY * sinRingAngle;
+                    const rotatedY = localX * sinRingAngle + localY * cosRingAngle;
+
+                    positions.push({ x: width / 2 + rotatedX, y: height / 2 + rotatedY });
+                }
+                return positions;
             }
 
             draw() {
@@ -259,8 +313,14 @@
             ctx.fillStyle = 'rgba(10, 10, 16, 0.1)';
             ctx.fillRect(0, 0, width, height);
             
+            // --- MODIFIED --- Calculate all shape positions once per frame for efficiency
+            const allShapePositions = [];
+            rings.forEach(ring => {
+                allShapePositions.push(...ring.getShapePositions());
+            });
+
             stardust.forEach(p => {
-                p.update();
+                p.update(allShapePositions); // Pass shape positions to particle update
                 p.draw();
             });
 
@@ -330,5 +390,3 @@
     </script>
 </body>
 </html>
-
-
