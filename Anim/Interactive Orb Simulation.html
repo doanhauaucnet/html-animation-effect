@@ -15,25 +15,6 @@
         canvas {
             display: block;
         }
-        #info-panel {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            padding: 10px;
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 8px;
-            font-size: 12px;
-            max-width: 250px;
-            line-height: 1.6;
-            pointer-events: none; /* Make it non-interactive */
-        }
-        #info-panel h2 {
-            margin-top: 0;
-            margin-bottom: 8px;
-            font-size: 14px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-            padding-bottom: 5px;
-        }
     </style>
 </head>
 <body>
@@ -61,8 +42,8 @@
         const MAX_SPEED = 4;
         const MIN_SPEED = 0.1;
         const MOUSE_REPEL_RADIUS = 150;
-        const MOUSE_REPEL_STRENGTH = -0.1;
-        const DRAG_REPEL_STRENGTH = -0.5;
+        const MOUSE_REPEL_STRENGTH = 1;
+        const DRAG_REPEL_STRENGTH = 0.5;
 
         // --- State ---
         let orbs = [];
@@ -141,6 +122,8 @@
                 this.maxStateCounter = 0;
                 this.pulseTargetRadius = 0;
                 this.alpha = 1;
+                this.target = null;
+                this.isTargeted = false;
             }
 
             applyForce(fx, fy) {
@@ -229,6 +212,47 @@
                         break;
                      case 'color_shifting':
                         if (this.stateCounter > this.maxStateCounter) { this.state = 'idle'; }
+                        break;
+                    case 'seeking_merge':
+                        if (!this.target || this.target.toRemove || !orbs.includes(this.target)) {
+                            this.state = 'idle';
+                            if(this.target) this.target.isTargeted = false;
+                            this.target = null;
+                            return;
+                        }
+                        const dx = this.target.x - this.x;
+                        const dy = this.target.y - this.y;
+                        const d = Math.sqrt(dx*dx + dy*dy);
+
+                        if (d < (this.radius + this.target.radius)) {
+                            mergeOrbs(this, this.target);
+                        } else {
+                            // Calculate velocity for this frame
+                            const vx = this.x - this.oldX;
+                            const vy = this.y - this.oldY;
+
+                            // Calculate target velocity (direct path)
+                            let targetVx = dx * 0.1;
+                            let targetVy = dy * 0.1;
+
+                            // Add swirl when close
+                            if (d < (this.radius + this.target.radius) * 4) {
+                                const swirlStrength = 1.5;
+                                targetVx += -dy / d * swirlStrength;
+                                targetVy += dx / d * swirlStrength;
+                            }
+                            
+                            // Interpolate current velocity towards target velocity
+                            const newVx = this.lerp(vx, targetVx, 0.2);
+                            const newVy = this.lerp(vy, targetVy, 0.2);
+                            
+                            this.oldX = this.x - newVx;
+                            this.oldY = this.y - newVy;
+
+                            if (frameCount % 3 === 0) {
+                                createTrailParticle(this);
+                            }
+                        }
                         break;
                 }
             }
@@ -404,12 +428,29 @@
             for (let i = 0; i < count; i++) { particles.push(new Particle(x, y, color)); }
         }
 
+        function createTrailParticle(orb) {
+             const trailParticle = new Particle(orb.x, orb.y, orb.color);
+             const vx = orb.x - orb.oldX;
+             const vy = orb.y - orb.oldY;
+             trailParticle.vx = -vx * 0.2 + random(-0.2, 0.2);
+             trailParticle.vy = -vy * 0.2 + random(-0.2, 0.2);
+             trailParticle.life = 0.5; // shorter life for trail
+             particles.push(trailParticle);
+        }
+
         // --- Main Simulation Logic ---
         function handleCollisions() {
             for (let i = 0; i < orbs.length; i++) {
                 for (let j = i + 1; j < orbs.length; j++) {
                     const orb1 = orbs[i];
                     const orb2 = orbs[j];
+                    
+                    // Skip collision between a seeking orb and its target
+                    if ((orb1.state === 'seeking_merge' && orb1.target === orb2) ||
+                        (orb2.state === 'seeking_merge' && orb2.target === orb1)) {
+                        continue;
+                    }
+
                     const totalRadius = orb1.radius * 1.2 + orb2.radius * 1.2;
                     const d = distance(orb1.x, orb1.y, orb2.x, orb2.y);
 
@@ -444,39 +485,40 @@
         }
 
         function handleMouseInteraction() {
-            for (const orb of orbs) {
-                if (draggedOrb === orb) continue;
-                const d = distance(mouse.x, mouse.y, orb.x, orb.y);
-                
-                if (draggedOrb) {
+            if (draggedOrb) {
+                // An orb is being dragged
+                // 1. Attract the dragged orb
+                const attractionStrength = 1.5;
+                const dx = mouse.x - draggedOrb.x;
+                const dy = mouse.y - draggedOrb.y;
+                draggedOrb.applyForce(dx * attractionStrength, dy * attractionStrength);
+
+                const damping = 0.8;
+                const vx = (draggedOrb.x - draggedOrb.oldX) * damping;
+                const vy = (draggedOrb.y - draggedOrb.oldY) * damping;
+                draggedOrb.oldX = draggedOrb.x - vx;
+                draggedOrb.oldY = draggedOrb.y - vy;
+
+                // 2. Repel all other orbs
+                for (const orb of orbs) {
+                    if (orb === draggedOrb) continue;
+                    const d = distance(mouse.x, mouse.y, orb.x, orb.y);
                     if (d < MOUSE_REPEL_RADIUS * 2) {
                         const angle = Math.atan2(orb.y - mouse.y, orb.x - mouse.x);
                         const force = (1 - d / (MOUSE_REPEL_RADIUS * 2)) * DRAG_REPEL_STRENGTH;
                         orb.applyForce(Math.cos(angle) * force, Math.sin(angle) * force);
                     }
-                } else if (!mouse.isDown) {
+                }
+            } else {
+                // No orb is being dragged - default hover behavior
+                for (const orb of orbs) {
+                    const d = distance(mouse.x, mouse.y, orb.x, orb.y);
                     if (d < MOUSE_REPEL_RADIUS) {
                         const angle = Math.atan2(orb.y - mouse.y, orb.x - mouse.x);
                         const force = (1 - d / MOUSE_REPEL_RADIUS) * MOUSE_REPEL_STRENGTH;
                         orb.applyForce(Math.cos(angle) * force, Math.sin(angle) * force);
                     }
                 }
-            }
-            if (draggedOrb) {
-                // Attract the dragged orb to the mouse with a spring-like force
-                const attractionStrength = 1.5;
-                const dx = mouse.x - draggedOrb.x;
-                const dy = mouse.y - draggedOrb.y;
-
-                draggedOrb.applyForce(dx * attractionStrength, dy * attractionStrength);
-
-                // Damp the orb's velocity to prevent overshooting and make it settle at the cursor
-                const damping = 0.8;
-                const vx = (draggedOrb.x - draggedOrb.oldX) * damping;
-                const vy = (draggedOrb.y - draggedOrb.oldY) * damping;
-
-                draggedOrb.oldX = draggedOrb.x - vx;
-                draggedOrb.oldY = draggedOrb.y - vy;
             }
         }
 
@@ -521,6 +563,22 @@
         }
         
         function balancePopulation() {
+            const BIG_ORB_RADIUS_THRESHOLD = 60;
+            let largestOrb = null;
+            let maxRadius = 0;
+
+            orbs.forEach(orb => {
+                if (orb.radius > maxRadius && orb.state === 'idle') {
+                    maxRadius = orb.radius;
+                    largestOrb = orb;
+                }
+            });
+
+            if (largestOrb && maxRadius > BIG_ORB_RADIUS_THRESHOLD) {
+                splitOrb(largestOrb);
+                return; 
+            }
+
             if (orbs.length < ORB_COUNT - 5) { spawnOrb(); return; }
             if (orbs.length > ORB_COUNT + 5) { despawnOrb(); return; }
 
@@ -546,11 +604,17 @@
             } 
             else if (counts[COLORS.BLUE] > target + 3) {
                  let blueOrbs = orbs.filter(o => o.color === COLORS.BLUE && o.state === 'idle');
+                 if (blueOrbs.length < 2) return;
+
+                 blueOrbs.sort((a, b) => a.radius - b.radius);
+
                  for(let i=0; i<blueOrbs.length; i++) {
                      for(let j=i+1; j<blueOrbs.length; j++) {
-                         const o1 = blueOrbs[i]; const o2 = blueOrbs[j];
-                         if(distance(o1.x, o1.y, o2.x, o2.y) < (o1.radius + o2.radius) * 3) {
-                             mergeOrbs(o1, o2); return;
+                         const o1 = blueOrbs[i];
+                         const o2 = blueOrbs[j];
+                         if(distance(o1.x, o1.y, o2.x, o2.y) < (o1.radius + o2.radius) * 4) {
+                             mergeOrbs(o1, o2);
+                             return;
                          }
                      }
                  }
@@ -575,7 +639,35 @@
             }
         }
         
+        function splitOrb(orb) {
+            orb.toRemove = true;
+            createParticles(orb.x, orb.y, orb.color, 20);
+
+            const newRadius = orb.baseRadius / Math.sqrt(2);
+            const angle = random(0, Math.PI * 2);
+            const speed = 2;
+
+            for (let i = 0; i < 2; i++) {
+                const currentAngle = angle + i * Math.PI; // Opposite directions
+                const newOrb = new Orb(
+                    orb.x,
+                    orb.y,
+                    newRadius,
+                    Object.values(COLORS)[Math.floor(random(0, 3))]
+                );
+                newOrb.oldX = newOrb.x - Math.cos(currentAngle) * speed;
+                newOrb.oldY = newOrb.y - Math.sin(currentAngle) * speed;
+                newOrb.state = 'fading_in';
+                newOrb.stateCounter = 0;
+                newOrb.maxStateCounter = 30;
+                orbs.push(newOrb);
+            }
+        }
+
         function mergeOrbs(orb1, orb2){
+            if(orb1.target) orb1.target.isTargeted = false;
+            if(orb2.target) orb2.target.isTargeted = false;
+
             const newRadius = Math.sqrt(orb1.radius**2 + orb2.radius**2);
             const newOrb = new Orb((orb1.x + orb2.x) / 2, (orb1.y + orb2.y) / 2, newRadius, Math.random() > 0.5 ? orb1.color : orb2.color);
             const v1x = orb1.x - orb1.oldX, v1y = orb1.y - orb1.oldY;
@@ -621,30 +713,22 @@
         canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 
         canvas.addEventListener('mousedown', e => {
+            if (e.button !== 0) return; // Only react to left-click
             mouse.isDown = true;
             let closestOrb = null;
             let minDistance = Infinity;
-            // Check if clicking directly on an orb
+
+            // Find the closest orb regardless of clicking on it or not
             for (const orb of orbs) {
                 const d = distance(mouse.x, mouse.y, orb.x, orb.y);
-                if (d < orb.radius * 1.5 && d < minDistance) {
+                if (d < minDistance) {
                     minDistance = d;
                     closestOrb = orb;
                 }
             }
-            // If not, find the nearest orb to attract
-            if (!closestOrb) {
-                minDistance = Infinity; // Reset minDistance
-                for (const orb of orbs) {
-                    const d = distance(mouse.x, mouse.y, orb.x, orb.y);
-                    if (d < minDistance) {
-                        minDistance = d;
-                        closestOrb = orb;
-                    }
-                }
-            }
 
-            if (closestOrb) {
+            // Only assign if we are not already dragging, to prevent attracting multiple orbs
+            if (!draggedOrb && closestOrb) {
                 draggedOrb = closestOrb;
                 draggedOrb.oldX = draggedOrb.x;
                 draggedOrb.oldY = draggedOrb.y;
@@ -652,28 +736,38 @@
         });
 
         canvas.addEventListener('mouseup', e => {
+            if (e.button !== 0) return; // Only react to left-click
             mouse.isDown = false;
             if (draggedOrb) {
                 switch (draggedOrb.color) {
                     case COLORS.WHITE: draggedOrb.explode(); break;
                     case COLORS.PURPLE: draggedOrb.pulse(); break;
                     case COLORS.BLUE:
-                        let targetOrb = null; minDistance = Infinity;
+                        let closestTarget = null;
+                        let minDistance = Infinity;
                         for (const orb of orbs) {
-                            if (orb === draggedOrb) continue;
+                            if (orb === draggedOrb || orb.state !== 'idle' || orb.isTargeted) continue;
                             const d = distance(draggedOrb.x, draggedOrb.y, orb.x, orb.y);
-                            if (d < orb.radius * 1.2 && d < minDistance) {
-                                minDistance = d; targetOrb = orb;
+                            if (d < minDistance) {
+                                minDistance = d;
+                                closestTarget = orb;
                             }
                         }
-                        if (targetOrb) { mergeOrbs(draggedOrb, targetOrb); }
+                        if (closestTarget) {
+                            draggedOrb.state = 'seeking_merge';
+                            draggedOrb.target = closestTarget;
+                            closestTarget.isTargeted = true;
+                        }
                         break;
                 }
                 draggedOrb = null;
             }
         });
         
-        canvas.addEventListener('dblclick', e => { shockwaves.push(new Shockwave(e.clientX, e.clientY)); });
+        canvas.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            shockwaves.push(new Shockwave(e.clientX, e.clientY));
+        });
 
         function init() {
             for (let i = 0; i < ORB_COUNT; i++) {
@@ -688,5 +782,4 @@
     </script>
 </body>
 </html>
-
 
