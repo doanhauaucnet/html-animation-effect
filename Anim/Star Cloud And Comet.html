@@ -113,6 +113,32 @@ class ImpactFlash {
 }
 let flashes=[];
 
+class CometTrailParticle {
+  constructor(x, y, colorHue) {
+    this.x = x;
+    this.y = y;
+    this.vx = 0;
+    this.vy = 0;
+    this.radius = Math.random() * 2 + 1;
+    this.colorHue = colorHue;
+    this.alpha = 1;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.alpha *= 0.92; // fade out
+  }
+  draw() {
+    if(this.alpha < 0.05) return;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+    ctx.fillStyle = `hsla(${this.colorHue},100%,70%,${this.alpha})`;
+    ctx.shadowColor = `hsla(${this.colorHue},100%,80%,${this.alpha})`;
+    ctx.shadowBlur = 15;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+}
 // --- Comet system ---
 class Comet {
   constructor() {
@@ -127,36 +153,52 @@ class Comet {
     let dx=this.tx-this.x, dy=this.ty-this.y;
     let mag=Math.sqrt(dx*dx+dy*dy);
     this.vx=dx/mag*6; this.vy=dy/mag*6;
-    this.radius=6; this.trail=[];
+    this.radius=6;
+    this.trailParticles = [];
     this.active=true;
     this.colorHue=200+Math.random()*100;
   }
+
   update() {
     if(!this.active) return;
-    this.trail.push({x:this.x,y:this.y});
-    if(this.trail.length>20) this.trail.shift();
-    this.x+=this.vx; this.y+=this.vy;
+
+    // Spawn trail particle
+    let trail = new CometTrailParticle(this.x, this.y, this.colorHue);
+    trail.vx = -this.vx*0.3 + (Math.random()-0.5)*1; // subtle spread
+    trail.vy = -this.vy*0.3 + (Math.random()-0.5)*1;
+    this.trailParticles.push(trail);
+    if(this.trailParticles.length > 50) this.trailParticles.shift();
+
+    // Update trail particles
+    for(let t of this.trailParticles) t.update();
+
+    // Move comet
+    this.x += this.vx;
+    this.y += this.vy;
+
     let dx=this.x-canvas.width/2, dy=this.y-canvas.height/2;
     if(Math.sqrt(dx*dx+dy*dy)<80){
-      this.impact(); this.active=false;
+      this.impact();
+      this.active=false;
     }
   }
+
   draw() {
     if(!this.active) return;
-    ctx.beginPath();
-    for(let i=0;i<this.trail.length;i++){
-      let p=this.trail[i];
-      ctx.lineTo(p.x,p.y);
-    }
-    ctx.strokeStyle=`hsla(${this.colorHue},100%,70%,0.5)`;
-    ctx.lineWidth=2; ctx.stroke();
 
+    // Draw trail particles
+    for(let t of this.trailParticles) t.draw();
+
+    // Draw comet core
     ctx.beginPath();
-    ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
     ctx.fillStyle=`hsla(${this.colorHue},100%,70%,1)`;
     ctx.shadowColor=`hsla(${this.colorHue},100%,80%,1)`;
-    ctx.shadowBlur=25; ctx.fill(); ctx.shadowBlur=0;
+    ctx.shadowBlur=25;
+    ctx.fill();
+    ctx.shadowBlur=0;
   }
+
   impact() {
     for(let p of particles){
       let dx=p.x-this.x, dy=p.y-this.y;
@@ -168,10 +210,10 @@ class Comet {
         p.vy+=Math.sin(angle)*force;
       }
     }
-    // Add localized flash instead of fullscreen
     flashes.push(new ImpactFlash(this.x,this.y,this.colorHue));
   }
 }
+
 let comets=[];
 function spawnComet(){
   comets.push(new Comet());
