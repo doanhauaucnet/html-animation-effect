@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Mesmerizing Particle Visualization</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100%;
+    background: #000;
+  }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="viz"></canvas>
+<script>
+const canvas = document.getElementById('viz');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const particles = [];
+const particleCount = 300;
+const mouse = { x: canvas.width/2, y: canvas.height/2, radius: 120, isDown: false };
+let hueShift = 0;
+
+// --- Particle system ---
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = canvas.width / 2;
+    this.y = canvas.height / 2;
+    this.vx = 0; this.vy = 0;
+    this.baseRadius = Math.random() * 2 + 1;
+    this.radius = this.baseRadius;
+    this.angle = Math.random() * 2 * Math.PI;
+    this.distance = Math.random() * Math.min(canvas.width, canvas.height)/3;
+    this.speed = 0.002 + Math.random() * 0.003;
+    this.colorHue = Math.random()*360;
+    this.orbitOffset = Math.random() * Math.PI*2;
+    this.pulseSpeed = 0.002 + Math.random()*0.002;
+  }
+  update() {
+    this.angle += this.speed;
+    let pulsing = Math.sin(Date.now() * this.pulseSpeed) * 5;
+    let targetX = canvas.width/2 + Math.cos(this.angle+this.orbitOffset)*(this.distance+pulsing);
+    let targetY = canvas.height/2 + Math.sin(this.angle+this.orbitOffset)*(this.distance+pulsing);
+
+    // Mouse interaction
+    let dx = this.x - mouse.x;
+    let dy = this.y - mouse.y;
+    let dist = Math.sqrt(dx*dx+dy*dy);
+    if(dist < mouse.radius) {
+      let force = (mouse.radius-dist)/mouse.radius;
+      let angle = Math.atan2(dy, dx);
+      if(mouse.isDown) { this.vx -= Math.cos(angle)*force*0.5; this.vy -= Math.sin(angle)*force*0.5; }
+      else { this.vx += Math.cos(angle)*force*0.3; this.vy += Math.sin(angle)*force*0.3; }
+    }
+
+    // Smooth motion
+    this.vx += (targetX - this.x) * 0.01;
+    this.vy += (targetY - this.y) * 0.01;
+    this.vx *= 0.95; this.vy *= 0.95;
+    this.x += this.vx; this.y += this.vy;
+
+    let depthFactor = this.distance / (Math.min(canvas.width, canvas.height)/3);
+    this.radius = this.baseRadius*(0.5+depthFactor);
+    this.opacity = 0.3+depthFactor*0.7;
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+    ctx.fillStyle = `hsla(${this.colorHue+hueShift},80%,60%,${this.opacity})`;
+    ctx.shadowColor = `hsla(${this.colorHue+hueShift},80%,70%,1)`;
+    ctx.shadowBlur = 15;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+}
+for(let i=0;i<particleCount;i++) particles.push(new Particle());
+
+// --- Impact flash system ---
+class ImpactFlash {
+  constructor(x,y,colorHue) {
+    this.x=x; this.y=y;
+    this.radius=0;
+    this.maxRadius=300;
+    this.alpha=0.8;
+    this.colorHue=colorHue;
+    this.active=true;
+  }
+  update() {
+    if(!this.active) return;
+    this.radius+=10;
+    this.alpha*=0.9;
+    if(this.alpha<0.05) this.active=false;
+  }
+  draw() {
+    if(!this.active) return;
+    let gradient=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.radius);
+    gradient.addColorStop(0,`hsla(${this.colorHue},100%,90%,${this.alpha})`);
+    gradient.addColorStop(0.5,`hsla(${this.colorHue},100%,70%,${this.alpha*0.6})`);
+    gradient.addColorStop(1,`hsla(${this.colorHue},100%,50%,0)`);
+    ctx.fillStyle=gradient;
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+    ctx.fill();
+  }
+}
+let flashes=[];
+
+// --- Comet system ---
+class Comet {
+  constructor() {
+    let side = Math.floor(Math.random()*4);
+    if(side===0){ this.x=-50; this.y=Math.random()*canvas.height; }
+    else if(side===1){ this.x=canvas.width+50; this.y=Math.random()*canvas.height; }
+    else if(side===2){ this.x=Math.random()*canvas.width; this.y=-50; }
+    else { this.x=Math.random()*canvas.width; this.y=canvas.height+50; }
+
+    this.tx = canvas.width/2;
+    this.ty = canvas.height/2;
+    let dx=this.tx-this.x, dy=this.ty-this.y;
+    let mag=Math.sqrt(dx*dx+dy*dy);
+    this.vx=dx/mag*6; this.vy=dy/mag*6;
+    this.radius=6; this.trail=[];
+    this.active=true;
+    this.colorHue=200+Math.random()*100;
+  }
+  update() {
+    if(!this.active) return;
+    this.trail.push({x:this.x,y:this.y});
+    if(this.trail.length>20) this.trail.shift();
+    this.x+=this.vx; this.y+=this.vy;
+    let dx=this.x-canvas.width/2, dy=this.y-canvas.height/2;
+    if(Math.sqrt(dx*dx+dy*dy)<80){
+      this.impact(); this.active=false;
+    }
+  }
+  draw() {
+    if(!this.active) return;
+    ctx.beginPath();
+    for(let i=0;i<this.trail.length;i++){
+      let p=this.trail[i];
+      ctx.lineTo(p.x,p.y);
+    }
+    ctx.strokeStyle=`hsla(${this.colorHue},100%,70%,0.5)`;
+    ctx.lineWidth=2; ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+    ctx.fillStyle=`hsla(${this.colorHue},100%,70%,1)`;
+    ctx.shadowColor=`hsla(${this.colorHue},100%,80%,1)`;
+    ctx.shadowBlur=25; ctx.fill(); ctx.shadowBlur=0;
+  }
+  impact() {
+    for(let p of particles){
+      let dx=p.x-this.x, dy=p.y-this.y;
+      let dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<200){
+        let force=(200-dist)/200*8;
+        let angle=Math.atan2(dy,dx);
+        p.vx+=Math.cos(angle)*force;
+        p.vy+=Math.sin(angle)*force;
+      }
+    }
+    // Add localized flash instead of fullscreen
+    flashes.push(new ImpactFlash(this.x,this.y,this.colorHue));
+  }
+}
+let comets=[];
+function spawnComet(){
+  comets.push(new Comet());
+  let nextTime=2000+Math.random()*4000;
+  setTimeout(spawnComet,nextTime);
+}
+spawnComet();
+
+// --- Animation loop ---
+function animate() {
+  hueShift+=0.1;
+  ctx.fillStyle="rgba(0,0,0,0.2)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  for(let i=0;i<particles.length;i++){
+    let p1=particles[i]; p1.update(); p1.draw();
+    for(let j=i+1;j<particles.length;j++){
+      let p2=particles[j];
+      let dx=p1.x-p2.x, dy=p1.y-p2.y;
+      let dist=dx*dx+dy*dy;
+      if(dist<80*80){
+        ctx.beginPath();
+        ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y);
+        ctx.strokeStyle=`hsla(${p1.colorHue+hueShift},80%,60%,0.05)`;
+        ctx.lineWidth=0.5; ctx.stroke();
+      }
+    }
+  }
+
+  for(let c of comets){ c.update(); c.draw(); }
+  for(let f of flashes){ f.update(); f.draw(); }
+
+  requestAnimationFrame(animate);
+}
+animate();
+
+// Mouse events
+canvas.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+canvas.addEventListener('mousedown',()=>{mouse.isDown=true;});
+canvas.addEventListener('mouseup',()=>{mouse.isDown=false;});
+
+window.addEventListener('resize',()=>{
+  canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+});
+</script>
+</body>
+</html>
