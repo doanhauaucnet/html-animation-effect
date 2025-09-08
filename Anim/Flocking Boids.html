@@ -14,23 +14,10 @@
             background-color: #0c0a18; /* Deep indigo background */
             font-family: 'Inter', sans-serif;
             color: white;
-            cursor: none; /* Hide default cursor */
         }
 
         canvas {
             display: block;
-        }
-
-        .overlay {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            padding: 10px 20px;
-            background-color: rgba(0, 0, 0, 0.4);
-            border-radius: 12px;
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            pointer-events: none;
         }
 
         h1 {
@@ -49,10 +36,6 @@
 </head>
 <body>
     <canvas id="boids-canvas"></canvas>
-    <div class="overlay">
-        <h1>Flocking Boids</h1>
-        <p>Move mouse to push. Click to spawn predators.</p>
-    </div>
 
     <script>
         const canvas = document.getElementById('boids-canvas');
@@ -64,7 +47,6 @@
         const predators = [];
         const particleEffects = [];
         const mouse = { x: null, y: null, radius: 100 }; // Mouse repels boids
-        const cursor = { x: 0, y: 0, radius: 10 };
         let initialBoidCount = 0;
 
         class ParticleEffect {
@@ -437,24 +419,6 @@
                 flock.push(new Boid(null, null, group.id, group.hue));
             }
         }
-        
-        function drawCursor() {
-            if (mouse.x !== null) {
-                cursor.x += (mouse.x - cursor.x) * 0.2;
-                cursor.y += (mouse.y - cursor.y) * 0.2;
-                
-                ctx.beginPath();
-                ctx.arc(cursor.x, cursor.y, cursor.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
-                ctx.lineWidth = 1;
-                ctx.stroke();
-
-                ctx.beginPath();
-                ctx.arc(cursor.x, cursor.y, cursor.radius * 0.2, 0, Math.PI * 2);
-                ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-                ctx.fill();
-            }
-        }
 
         function animate() {
             ctx.fillStyle = 'rgba(12, 10, 24, 0.2)';
@@ -502,8 +466,6 @@
                 const group = groups[Math.floor(Math.random() * groups.length)];
                 flock.push(new Boid(null, null, group.id, group.hue));
             }
-            
-            drawCursor();
 
             requestAnimationFrame(animate);
         }
