@@ -19,36 +19,10 @@
             width: 100vw;
             height: 100vh;
         }
-
-        .info-overlay {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            opacity: 0.7;
-            pointer-events: none;
-            transition: opacity 0.5s;
-        }
-
-        .info-overlay h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            letter-spacing: -1px;
-        }
-
-        .info-overlay p {
-            font-size: 1rem;
-            font-weight: 300;
-        }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
-    <div id="info" class="info-overlay">
-        <h1>BIOLUMINESCENT FIELD</h1>
-        <p>Move your mouse to create waves of light.</p>
-    </div>
 
     <script>
         // Get the canvas and its 2D rendering context

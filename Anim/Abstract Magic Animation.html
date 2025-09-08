@@ -5,23 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Abstract Magic Animation</title>
     <style>
-        /* Basic CSS Reset to remove default browser styles */
         body, html {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            /* A deep, magical background color enhances the particle glow */
             background-color: #0c0c1e;
             font-family: 'Inter', sans-serif;
         }
-        /* Canvas should fill the entire viewport */
         #magicCanvas {
             display: block;
             position: absolute;
             top: 0;
             left: 0;
         }
-        /* Simple instruction text overlay */
         .instructions {
             position: absolute;
             bottom: 20px;
@@ -29,289 +25,124 @@
             transform: translateX(-50%);
             color: rgba(255, 255, 255, 0.4);
             font-size: 14px;
-            pointer-events: none; /* Allows mouse events to pass through to the canvas */
+            pointer-events: none;
             text-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
     </style>
-    <!-- Google Fonts for a cleaner look on the instruction text -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- The canvas element where the animation will be drawn -->
-    <canvas id="magicCanvas"></canvas>
-    
-    <!-- Instructional text for the user -->
-    <div class="instructions">Move your mouse to summon the magic</div>
+<canvas id="magicCanvas"></canvas>
+<div class="instructions">Click and drag to summon the magic</div>
+<script>
+const canvas = document.getElementById('magicCanvas');
+const ctx = canvas.getContext('2d');
+let width = canvas.width = window.innerWidth;
+let height = canvas.height = window.innerHeight;
+window.addEventListener('resize', () => {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+});
 
-    <script>
-        // --- Canvas Setup ---
-        const canvas = document.getElementById('magicCanvas');
-        const ctx = canvas.getContext('2d');
+// --- Mouse State ---
+const mouse = { x: width/2, y: height/2, isDown: false };
+window.addEventListener('mousedown', e => { mouse.isDown = true; mouse.x = e.x; mouse.y = e.y; });
+window.addEventListener('mouseup', () => { mouse.isDown = false; });
+window.addEventListener('mousemove', e => { mouse.x = e.x; mouse.y = e.y; });
+window.addEventListener('touchstart', e => { mouse.isDown = true; if(e.touches[0]) { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; } });
+window.addEventListener('touchend', () => { mouse.isDown = false; });
+window.addEventListener('touchmove', e => { if(e.touches[0]) { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; } });
 
-        // Set initial canvas dimensions and handle resizing
-        let width = canvas.width = window.innerWidth;
-        let height = canvas.height = window.innerHeight;
+// --- Simplex Noise ---
+const SimplexNoise = (function() {
+    const F2 = 0.5*(Math.sqrt(3)-1), G2 = (3-Math.sqrt(3))/6;
+    const grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+    const p=[], perm=new Array(512), permMod12=new Array(512);
+    for(let i=0;i<256;i++) p[i]=Math.floor(Math.random()*256);
+    for(let i=0;i<512;i++){ perm[i]=p[i&255]; permMod12[i]=perm[i]%12; }
+    function dot(g,x,y){ return g[0]*x+g[1]*y; }
+    return { noise: function(xin,yin){
+        let n0,n1,n2;
+        const s=(xin+yin)*F2;
+        const i=Math.floor(xin+s), j=Math.floor(yin+s);
+        const t=(i+j)*G2, X0=i-t, Y0=j-t, x0=xin-X0, y0=yin-Y0;
+        let i1,j1; if(x0>y0){i1=1;j1=0;}else{i1=0;j1=1;}
+        const x1=x0-i1+G2, y1=y0-j1+G2, x2=x0-1+2*G2, y2=y0-1+2*G2;
+        const ii=i&255, jj=j&255;
+        const gi0=permMod12[ii+perm[jj]], gi1=permMod12[ii+i1+perm[jj+j1]], gi2=permMod12[ii+1+perm[jj+1]];
+        let t0=0.5-x0*x0-y0*y0; n0 = t0<0 ? 0 : (t0*t0)*(t0*t0)*dot(grad3[gi0],x0,y0);
+        let t1=0.5-x1*x1-y1*y1; n1 = t1<0 ? 0 : (t1*t1)*(t1*t1)*dot(grad3[gi1],x1,y1);
+        let t2=0.5-x2*x2-y2*y2; n2 = t2<0 ? 0 : (t2*t2)*(t2*t2)*dot(grad3[gi2],x2,y2);
+        return 70*(n0+n1+n2);
+    }};
+})();
 
-        window.addEventListener('resize', () => {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-        });
+// --- Particle System ---
+const particlesArray = [];
+const colors = ['#a855f7','#ec4899','#60a5fa','#34d399','#facc15'];
+class Particle {
+    constructor() { this.reset(); }
+    reset() {
+        this.x = mouse.x + (Math.random()-0.5)*50;
+        this.y = mouse.y + (Math.random()-0.5)*50;
+        this.size = Math.random()*8+2;
+        this.baseSize = this.size;
+        this.speedX = (Math.random()-0.5)*0.5;
+        this.speedY = (Math.random()-0.5)*0.5;
+        this.color = colors[Math.floor(Math.random()*colors.length)];
+        this.lifespan = Math.random()*200+300;
+        this.currentLife = this.lifespan;
+        this.noiseOffsetX = Math.random()*1000;
+        this.noiseOffsetY = Math.random()*1000;
+        this.noiseScale = 0.003;
+    }
+    update() {
+        this.currentLife--;
+        if(this.currentLife<=0){ this.reset(); }
+        const noiseX = SimplexNoise.noise(this.x*this.noiseScale,this.noiseOffsetY)*0.5;
+        const noiseY = SimplexNoise.noise(this.noiseOffsetX,this.y*this.noiseScale)*0.5;
+        this.speedX += noiseX; this.speedY += noiseY;
+        this.speedX *= 0.97; this.speedY *= 0.97;
+        this.x += this.speedX; this.y += this.speedY;
+        const lifePercentage = this.currentLife/this.lifespan;
+        this.size = this.baseSize*lifePercentage;
+        if(this.size<0) this.size=0;
+    }
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+        ctx.fillStyle=this.color;
+        ctx.fill();
+    }
+}
 
-        // --- Mouse Interaction ---
-        const mouse = {
-            x: width / 2,
-            y: height / 2,
-            radius: 150 // Area of influence around the mouse
-        };
-
-        window.addEventListener('mousemove', (event) => {
-            mouse.x = event.x;
-            mouse.y = event.y;
-        });
-        
-        window.addEventListener('touchmove', (event) => {
-            if (event.touches.length > 0) {
-                mouse.x = event.touches[0].clientX;
-                mouse.y = event.touches[0].clientY;
-            }
-        });
-        
-        window.addEventListener('touchend', () => {
-             // Optional: could reset mouse position or fade out effect
-        });
-
-
-        // --- Simplex Noise Implementation ---
-        // This is a key part of the "magic". It creates smooth, organic, non-repeating patterns
-        // which are far more natural than standard random number generation.
-        const SimplexNoise = (function() {
-            // Skewing and unskewing constants for 2D
-            const F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
-            const G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
-
-            const grad3 = [
-                [1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0],
-                [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1],
-                [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]
-            ];
-
-            // A seeded random number generator for consistency if needed
-            const p = [];
-            const perm = new Array(512);
-            const permMod12 = new Array(512);
-
-            // Initialize the permutation table with a seeded random generator
-            // Using a fixed seed for now, can be randomized
-            const seed = Math.random;
-            for (let i = 0; i < 256; i++) {
-                p[i] = Math.floor(seed() * 256);
-            }
-
-            for (let i = 0; i < 512; i++) {
-                perm[i] = p[i & 255];
-                permMod12[i] = perm[i] % 12;
-            }
-
-            // Dot product of gradient and distance vector
-            function dot(g, x, y) {
-                return g[0] * x + g[1] * y;
-            }
-
-            return {
-                noise: function(xin, yin) {
-                    let n0, n1, n2; // Noise contributions from the three corners
-
-                    // Skew the input space to determine which simplex cell we're in
-                    const s = (xin + yin) * F2;
-                    const i = Math.floor(xin + s);
-                    const j = Math.floor(yin + s);
-                    const t = (i + j) * G2;
-                    const X0 = i - t; // Unskewed x,y of the cell origin
-                    const Y0 = j - t;
-                    const x0 = xin - X0; // The x,y distances from the cell origin
-                    const y0 = yin - Y0;
-
-                    // For the 2D case, the simplex shape is an equilateral triangle.
-                    // Determine which simplex we are in.
-                    let i1, j1; // Offsets for second corner of simplex in (i,j) coords
-                    if (x0 > y0) {
-                        i1 = 1;
-                        j1 = 0;
-                    } // lower triangle, XY order: (0,0)->(1,0)->(1,1)
-                    else {
-                        i1 = 0;
-                        j1 = 1;
-                    } // upper triangle, YX order: (0,0)->(0,1)->(1,1)
-
-                    const x1 = x0 - i1 + G2;
-                    const y1 = y0 - j1 + G2;
-                    const x2 = x0 - 1.0 + 2.0 * G2;
-                    const y2 = y0 - 1.0 + 2.0 * G2;
-
-                    // Work out the hashed gradient indices of the three simplex corners
-                    const ii = i & 255;
-                    const jj = j & 255;
-                    const gi0 = permMod12[ii + perm[jj]];
-                    const gi1 = permMod12[ii + i1 + perm[jj + j1]];
-                    const gi2 = permMod12[ii + 1 + perm[jj + 1]];
-
-                    // Calculate the contribution from the three corners
-                    let t0 = 0.5 - x0 * x0 - y0 * y0;
-                    if (t0 < 0) n0 = 0.0;
-                    else {
-                        t0 *= t0;
-                        n0 = t0 * t0 * dot(grad3[gi0], x0, y0);
-                    }
-
-                    let t1 = 0.5 - x1 * x1 - y1 * y1;
-                    if (t1 < 0) n1 = 0.0;
-                    else {
-                        t1 *= t1;
-                        n1 = t1 * t1 * dot(grad3[gi1], x1, y1);
-                    }
-
-                    let t2 = 0.5 - x2 * x2 - y2 * y2;
-                    if (t2 < 0) n2 = 0.0;
-                    else {
-                        t2 *= t2;
-                        n2 = t2 * t2 * dot(grad3[gi2], x2, y2);
-                    }
-
-                    // Add contributions from each corner to get the final noise value.
-                    // The result is scaled to return values in the interval [-1,1].
-                    return 70.0 * (n0 + n1 + n2);
-                }
-            };
-        })();
-
-
-        // --- Particle System ---
-        const particlesArray = [];
-        const particleCount = 200;
-        // A magical color palette
-        const colors = ['#a855f7', '#ec4899', '#60a5fa', '#34d399', '#facc15'];
-
-        // The Particle class defines the behavior of each individual magic wisp
-        class Particle {
-            constructor() {
-                // Start particles near the mouse position for an interactive feel
-                this.x = mouse.x + (Math.random() - 0.5) * 50;
-                this.y = mouse.y + (Math.random() - 0.5) * 50;
-                this.size = Math.random() * 8 + 2;
-                this.baseSize = this.size;
-                this.speedX = (Math.random() - 0.5) * 0.5;
-                this.speedY = (Math.random() - 0.5) * 0.5;
-                this.color = colors[Math.floor(Math.random() * colors.length)];
-                this.lifespan = Math.random() * 200 + 300;
-                this.currentLife = this.lifespan;
-                
-                // For noise-based movement
-                this.noiseOffsetX = Math.random() * 1000;
-                this.noiseOffsetY = Math.random() * 1000;
-                this.noiseScale = 0.003; // Controls the "waviness" of the movement
-            }
-
-            // Update particle position, size, and lifespan
-            update() {
-                this.currentLife--;
-
-                // If particle is dead, reset it
-                if (this.currentLife <= 0) {
-                    this.reset();
-                }
-
-                // --- Movement Logic ---
-                // 1. Simplex Noise for organic, flowing movement
-                const noiseX = SimplexNoise.noise(this.x * this.noiseScale, this.noiseOffsetY) * 0.5;
-                const noiseY = SimplexNoise.noise(this.noiseOffsetX, this.y * this.noiseScale) * 0.5;
-                this.speedX += noiseX;
-                this.speedY += noiseY;
-
-                // 2. Mouse Interaction: Repel particles from the mouse cursor
-                const dx = this.x - mouse.x;
-                const dy = this.y - mouse.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < mouse.radius) {
-                    const forceDirectionX = dx / distance;
-                    const forceDirectionY = dy / distance;
-                    const force = (mouse.radius - distance) / mouse.radius;
-                    // Push particles away from the mouse
-                    this.speedX += forceDirectionX * force * 0.2;
-                    this.speedY += forceDirectionY * force * 0.2;
-                }
-                
-                // 3. Damping / Friction to slow particles down over time
-                this.speedX *= 0.97;
-                this.speedY *= 0.97;
-
-                // 4. Update position
-                this.x += this.speedX;
-                this.y += this.speedY;
-
-                // --- Visuals Logic ---
-                // Shrink particle as it nears the end of its life
-                const lifePercentage = this.currentLife / this.lifespan;
-                this.size = this.baseSize * lifePercentage;
-                if (this.size < 0) this.size = 0;
-            }
-
-            // Draw the particle on the canvas
-            draw() {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fillStyle = this.color;
-                ctx.fill();
-            }
-            
-            // Reset particle to a new state
-            reset() {
-                this.x = mouse.x + (Math.random() - 0.5) * 50;
-                this.y = mouse.y + (Math.random() - 0.5) * 50;
-                this.size = Math.random() * 8 + 2;
-                this.baseSize = this.size;
-                this.speedX = (Math.random() - 0.5) * 0.5;
-                this.speedY = (Math.random() - 0.5) * 0.5;
-                this.lifespan = Math.random() * 200 + 300;
-                this.currentLife = this.lifespan;
-            }
+// --- Spawn Particles Only on Click & Drag ---
+function spawnParticles() {
+    const maxParticlesPerFrame = 5;
+    if (mouse.isDown) {
+        for (let i=0; i<maxParticlesPerFrame; i++){
+            particlesArray.push(new Particle());
         }
+    }
+}
 
-        // Initialize the particle array
-        function init() {
-            particlesArray.length = 0; // Clear array
-            for (let i = 0; i < particleCount; i++) {
-                particlesArray.push(new Particle());
-            }
-        }
-        init();
+// --- Animation Loop ---
+function animate() {
+    ctx.fillStyle='rgba(12,12,30,0.15)';
+    ctx.fillRect(0,0,width,height);
 
-        // --- Animation Loop ---
-        function animate() {
-            // Clear the canvas with a semi-transparent black. This creates a trailing/fading effect.
-            ctx.fillStyle = 'rgba(12, 12, 30, 0.15)';
-            ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation='lighter';
 
-            // Using 'lighter' creates a beautiful glowing effect where particles overlap
-            ctx.globalCompositeOperation = 'lighter';
+    spawnParticles();
 
-            // Update and draw each particle
-            for (let i = 0; i < particlesArray.length; i++) {
-                particlesArray[i].update();
-                particlesArray[i].draw();
-            }
-            
-            // Reset composite operation for the clearing rect in the next frame
-            ctx.globalCompositeOperation = 'source-over';
+    for(let i=0;i<particlesArray.length;i++){
+        particlesArray[i].update();
+        particlesArray[i].draw();
+    }
 
-            // Request the next frame
-            requestAnimationFrame(animate);
-        }
-        
-        // Start the animation
-        animate();
-
-    </script>
+    ctx.globalCompositeOperation='source-over';
+    requestAnimationFrame(animate);
+}
+animate();
+</script>
 </body>
 </html>
