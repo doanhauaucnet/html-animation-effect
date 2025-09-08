@@ -24,21 +24,6 @@
             display: block;
         }
         
-        /* Simple overlay for instructions */
-        .instructions {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 14px;
-            text-align: center;
-            padding: 10px 20px;
-            background-color: rgba(0, 0, 0, 0.3);
-            border-radius: 20px;
-            pointer-events: none; /* Make it non-interactive */
-            transition: opacity 0.5s;
-        }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -46,7 +31,6 @@
 </head>
 <body>
     <canvas id="cosmicCanvas"></canvas>
-    <div class="instructions" id="instructions">Move your mouse to stir the cosmos. Click to reset.</div>
 
     <script>
         // --- Canvas and Context Setup ---
@@ -72,6 +56,17 @@
         const instructions = document.getElementById('instructions');
         let instructionTimeout;
 
+        // Shockwave effect variables
+        const shockwave = {
+            active: false,
+            x: 0,
+            y: 0,
+            radius: 0,
+            maxRadius: 500, // Max size of the shockwave
+            force: 0.4, // Strength of the push
+            speed: 5, // How fast the shockwave expands
+        };
+
         // --- Utility Functions ---
         
         /**
@@ -87,7 +82,7 @@
         /**
          * Calculates the distance between two points.
          * @param {number} x1 - X-coordinate of the first point.
-         * @param {number} y1 - Y-coordinate of the first point.
+         * @param {number} y1 - Y-coordinate of the second point.
          * @param {number} x2 - X-coordinate of the second point.
          * @param {number} y2 - Y-coordinate of the second point.
          * @returns {number} The distance between the two points.
@@ -112,16 +107,27 @@
 
             // Update particle position and velocity
             update() {
-                const dist = distance(this.x, this.y, attractor.x, attractor.y);
-                const angle = Math.atan2(attractor.y - this.y, attractor.x - this.x);
-
                 // Gravitational pull towards the attractor
-                // The force is stronger when closer
-                const force = (attractor.radius - dist) / attractor.radius * 0.1;
+                const distToAttractor = distance(this.x, this.y, attractor.x, attractor.y);
+                const angleToAttractor = Math.atan2(attractor.y - this.y, attractor.x - this.x);
+                const forceAttractor = (attractor.radius - distToAttractor) / attractor.radius * 0.1;
 
-                if (dist < attractor.radius) {
-                    this.vx += Math.cos(angle) * force;
-                    this.vy += Math.sin(angle) * force;
+                if (distToAttractor < attractor.radius) {
+                    this.vx += Math.cos(angleToAttractor) * forceAttractor;
+                    this.vy += Math.sin(angleToAttractor) * forceAttractor;
+                }
+
+                // Shockwave effect logic
+                if (shockwave.active) {
+                    const distToShockwave = distance(this.x, this.y, shockwave.x, shockwave.y);
+                    const angleToShockwave = Math.atan2(this.y - shockwave.y, this.x - shockwave.x);
+
+                    if (distToShockwave < shockwave.radius) {
+                        // The closer the particle is to the center of the shockwave, the stronger the push
+                        const shockForce = shockwave.force * (1 - distToShockwave / shockwave.radius);
+                        this.vx += Math.cos(angleToShockwave) * shockForce;
+                        this.vy += Math.sin(angleToShockwave) * shockForce;
+                    }
                 }
 
                 // Apply friction to slow down particles over time
@@ -193,6 +199,15 @@
                 p.draw();
             });
 
+            // Update shockwave if active
+            if (shockwave.active) {
+                shockwave.radius += shockwave.speed;
+                if (shockwave.radius > shockwave.maxRadius) {
+                    shockwave.active = false;
+                    shockwave.radius = 0; // Reset for the next click
+                }
+            }
+
             // Increment the hue to cycle through colors
             hue++;
 
@@ -227,9 +242,12 @@
             attractor.y = height / 2;
         });
         
-        // On click, create a "big bang" effect by re-initializing particles
-        window.addEventListener('click', () => {
-             init();
+        // On click, create a shockwave at the mouse position
+        window.addEventListener('click', (e) => {
+            shockwave.active = true;
+            shockwave.x = e.clientX;
+            shockwave.y = e.clientY;
+            shockwave.radius = 0; // Start the shockwave from radius 0
         });
 
 
@@ -241,7 +259,6 @@
         instructionTimeout = setTimeout(() => {
             instructions.style.opacity = '0';
         }, 5000);
-
     </script>
 </body>
 </html>
