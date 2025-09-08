@@ -96,44 +96,6 @@
         const stars = new THREE.Points(starGeometry, starMaterial);
         scene.add(stars);
 
-        // --- Cosmic Nebulae Background ---
-        const nebulaCount = 500;
-        const nebulaPositions = new Float32Array(nebulaCount * 3);
-        const nebulaColors = new Float32Array(nebulaCount * 3);
-        const nebulaGeometry = new THREE.BufferGeometry();
-        const nebulaMaterial = new THREE.PointsMaterial({
-            size: 50,
-            vertexColors: true,
-            blending: THREE.AdditiveBlending,
-            transparent: true,
-            opacity: 0.05,
-        });
-
-        const nebulaPalette = [
-            new THREE.Color(0x8a2be2), // Blue Violet
-            new THREE.Color(0xff4500), // Orange Red
-            new THREE.Color(0x00bfff), // Deep Sky Blue
-        ];
-        
-        for (let i = 0; i < nebulaCount; i++) {
-            const i3 = i * 3;
-            const r = 900 + Math.random() * 100;
-            const theta = Math.random() * 2 * Math.PI;
-            const phi = Math.acos((Math.random() * 2) - 1);
-            nebulaPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
-            nebulaPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-            nebulaPositions[i3 + 2] = r * Math.cos(phi);
-            
-            const color = nebulaPalette[Math.floor(Math.random() * nebulaPalette.length)];
-            nebulaColors[i3] = color.r;
-            nebulaColors[i3 + 1] = color.g;
-            nebulaColors[i3 + 2] = color.b;
-        }
-        nebulaGeometry.setAttribute('position', new THREE.BufferAttribute(nebulaPositions, 3));
-        nebulaGeometry.setAttribute('color', new THREE.BufferAttribute(nebulaColors, 3));
-        const nebulae = new THREE.Points(nebulaGeometry, nebulaMaterial);
-        scene.add(nebulae);
-
         // --- PARTICLE INITIALIZATION (main cloud) ---
         const particleData = [];
         const colorPalette = [
@@ -277,8 +239,6 @@
             particles.rotation.x = elapsedTime * 0.02;
             stars.rotation.y = elapsedTime * 0.01;
             stars.rotation.x = elapsedTime * 0.005;
-            nebulae.rotation.y = elapsedTime * 0.005;
-            nebulae.rotation.x = elapsedTime * 0.002;
 
             renderer.render(scene, camera);
         }
