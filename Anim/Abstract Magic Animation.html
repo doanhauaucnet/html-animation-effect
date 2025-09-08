@@ -18,108 +18,130 @@
             top: 0;
             left: 0;
         }
-        .instructions {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 14px;
-            pointer-events: none;
-            text-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
     </style>
 </head>
 <body>
 <canvas id="magicCanvas"></canvas>
-<div class="instructions">Click and drag to summon the magic</div>
 <script>
 const canvas = document.getElementById('magicCanvas');
 const ctx = canvas.getContext('2d');
 let width = canvas.width = window.innerWidth;
 let height = canvas.height = window.innerHeight;
+
+// --- Window Resize Listener ---
 window.addEventListener('resize', () => {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
 });
 
-// --- Mouse State ---
+// --- Mouse State and Touch State ---
+// This object tracks the mouse/touch position and if a click/tap is active.
 const mouse = { x: width/2, y: height/2, isDown: false };
+
 window.addEventListener('mousedown', e => { mouse.isDown = true; mouse.x = e.x; mouse.y = e.y; });
 window.addEventListener('mouseup', () => { mouse.isDown = false; });
 window.addEventListener('mousemove', e => { mouse.x = e.x; mouse.y = e.y; });
-window.addEventListener('touchstart', e => { mouse.isDown = true; if(e.touches[0]) { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; } });
+window.addEventListener('touchstart', e => {
+    mouse.isDown = true;
+    if(e.touches[0]) {
+        mouse.x = e.touches[0].clientX;
+        mouse.y = e.touches[0].clientY;
+    }
+});
 window.addEventListener('touchend', () => { mouse.isDown = false; });
-window.addEventListener('touchmove', e => { if(e.touches[0]) { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; } });
+window.addEventListener('touchmove', e => {
+    if(e.touches[0]) {
+        mouse.x = e.touches[0].clientX;
+        mouse.y = e.touches[0].clientY;
+    }
+});
 
-// --- Simplex Noise ---
+// --- Simplex Noise Generator ---
+// Used to create the organic, swirling movement for the particles.
 const SimplexNoise = (function() {
-    const F2 = 0.5*(Math.sqrt(3)-1), G2 = (3-Math.sqrt(3))/6;
+    const F2 = 0.5 * (Math.sqrt(3) - 1), G2 = (3 - Math.sqrt(3)) / 6;
     const grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
-    const p=[], perm=new Array(512), permMod12=new Array(512);
-    for(let i=0;i<256;i++) p[i]=Math.floor(Math.random()*256);
-    for(let i=0;i<512;i++){ perm[i]=p[i&255]; permMod12[i]=perm[i]%12; }
-    function dot(g,x,y){ return g[0]*x+g[1]*y; }
-    return { noise: function(xin,yin){
-        let n0,n1,n2;
-        const s=(xin+yin)*F2;
-        const i=Math.floor(xin+s), j=Math.floor(yin+s);
-        const t=(i+j)*G2, X0=i-t, Y0=j-t, x0=xin-X0, y0=yin-Y0;
-        let i1,j1; if(x0>y0){i1=1;j1=0;}else{i1=0;j1=1;}
-        const x1=x0-i1+G2, y1=y0-j1+G2, x2=x0-1+2*G2, y2=y0-1+2*G2;
-        const ii=i&255, jj=j&255;
-        const gi0=permMod12[ii+perm[jj]], gi1=permMod12[ii+i1+perm[jj+j1]], gi2=permMod12[ii+1+perm[jj+1]];
-        let t0=0.5-x0*x0-y0*y0; n0 = t0<0 ? 0 : (t0*t0)*(t0*t0)*dot(grad3[gi0],x0,y0);
-        let t1=0.5-x1*x1-y1*y1; n1 = t1<0 ? 0 : (t1*t1)*(t1*t1)*dot(grad3[gi1],x1,y1);
-        let t2=0.5-x2*x2-y2*y2; n2 = t2<0 ? 0 : (t2*t2)*(t2*t2)*dot(grad3[gi2],x2,y2);
-        return 70*(n0+n1+n2);
-    }};
+    const p = [], perm = new Array(512), permMod12 = new Array(512);
+    for(let i=0; i<256; i++) p[i] = Math.floor(Math.random()*256);
+    for(let i=0; i<512; i++){ perm[i] = p[i & 255]; permMod12[i] = perm[i] % 12; }
+    function dot(g, x, y){ return g[0] * x + g[1] * y; }
+    return {
+        noise: function(xin, yin) {
+            let n0, n1, n2;
+            const s = (xin + yin) * F2;
+            const i = Math.floor(xin + s), j = Math.floor(yin + s);
+            const t = (i + j) * G2, X0 = i - t, Y0 = j - t, x0 = xin - X0, y0 = yin - Y0;
+            let i1, j1;
+            if (x0 > y0) { i1 = 1; j1 = 0; } else { i1 = 0; j1 = 1; }
+            const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2, x2 = x0 - 1 + 2 * G2, y2 = y0 - 1 + 2 * G2;
+            const ii = i & 255, jj = j & 255;
+            const gi0 = permMod12[ii + perm[jj]], gi1 = permMod12[ii + i1 + perm[jj + j1]], gi2 = permMod12[ii + 1 + perm[jj + 1]];
+            let t0 = 0.5 - x0 * x0 - y0 * y0;
+            n0 = t0 < 0 ? 0 : (t0 * t0) * (t0 * t0) * dot(grad3[gi0], x0, y0);
+            let t1 = 0.5 - x1 * x1 - y1 * y1;
+            n1 = t1 < 0 ? 0 : (t1 * t1) * (t1 * t1) * dot(grad3[gi1], x1, y1);
+            let t2 = 0.5 - x2 * x2 - y2 * y2;
+            n2 = t2 < 0 ? 0 : (t2 * t2) * (t2 * t2) * dot(grad3[gi2], x2, y2);
+            return 70 * (n0 + n1 + n2);
+        }
+    };
 })();
 
 // --- Particle System ---
 const particlesArray = [];
 const colors = ['#a855f7','#ec4899','#60a5fa','#34d399','#facc15'];
+
 class Particle {
-    constructor() { this.reset(); }
-    reset() {
-        this.x = mouse.x + (Math.random()-0.5)*50;
-        this.y = mouse.y + (Math.random()-0.5)*50;
-        this.size = Math.random()*8+2;
+    constructor() {
+        this.x = mouse.x + (Math.random() - 0.5) * 50;
+        this.y = mouse.y + (Math.random() - 0.5) * 50;
+        this.size = Math.random() * 8 + 2;
         this.baseSize = this.size;
-        this.speedX = (Math.random()-0.5)*0.5;
-        this.speedY = (Math.random()-0.5)*0.5;
-        this.color = colors[Math.floor(Math.random()*colors.length)];
-        this.lifespan = Math.random()*200+300;
+        this.speedX = (Math.random() - 0.5) * 0.5;
+        this.speedY = (Math.random() - 0.5) * 0.5;
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+        this.lifespan = Math.random() * 200 + 300;
         this.currentLife = this.lifespan;
-        this.noiseOffsetX = Math.random()*1000;
-        this.noiseOffsetY = Math.random()*1000;
+        this.noiseOffsetX = Math.random() * 1000;
+        this.noiseOffsetY = Math.random() * 1000;
         this.noiseScale = 0.003;
     }
+    
+    // Updates the particle's position and life.
+    // The key change here is the removal of the reset() call.
     update() {
         this.currentLife--;
-        if(this.currentLife<=0){ this.reset(); }
-        const noiseX = SimplexNoise.noise(this.x*this.noiseScale,this.noiseOffsetY)*0.5;
-        const noiseY = SimplexNoise.noise(this.noiseOffsetX,this.y*this.noiseScale)*0.5;
-        this.speedX += noiseX; this.speedY += noiseY;
-        this.speedX *= 0.97; this.speedY *= 0.97;
-        this.x += this.speedX; this.y += this.speedY;
-        const lifePercentage = this.currentLife/this.lifespan;
-        this.size = this.baseSize*lifePercentage;
-        if(this.size<0) this.size=0;
+        
+        const noiseX = SimplexNoise.noise(this.x * this.noiseScale, this.noiseOffsetY) * 0.5;
+        const noiseY = SimplexNoise.noise(this.noiseOffsetX, this.y * this.noiseScale) * 0.5;
+        
+        this.speedX += noiseX;
+        this.speedY += noiseY;
+        this.speedX *= 0.97;
+        this.speedY *= 0.97;
+        
+        this.x += this.speedX;
+        this.y += this.speedY;
+        
+        const lifePercentage = this.currentLife / this.lifespan;
+        this.size = this.baseSize * lifePercentage;
+        if (this.size < 0) this.size = 0;
     }
+
+    // Draws the particle on the canvas.
     draw() {
         ctx.beginPath();
-        ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
-        ctx.fillStyle=this.color;
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
         ctx.fill();
     }
 }
 
-// --- Spawn Particles Only on Click & Drag ---
+// --- Spawns new particles when the mouse is down ---
 function spawnParticles() {
     const maxParticlesPerFrame = 5;
     if (mouse.isDown) {
-        for (let i=0; i<maxParticlesPerFrame; i++){
+        for (let i = 0; i < maxParticlesPerFrame; i++){
             particlesArray.push(new Particle());
         }
     }
@@ -127,22 +149,38 @@ function spawnParticles() {
 
 // --- Animation Loop ---
 function animate() {
-    ctx.fillStyle='rgba(12,12,30,0.15)';
-    ctx.fillRect(0,0,width,height);
-
-    ctx.globalCompositeOperation='lighter';
-
+    // Fills the canvas with a semi-transparent color to create a fading trail effect.
+    ctx.fillStyle = 'rgba(12, 12, 30, 0.15)';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Sets the composite operation for a glowing effect.
+    ctx.globalCompositeOperation = 'lighter';
+    
     spawnParticles();
-
-    for(let i=0;i<particlesArray.length;i++){
+    
+    // Iterates backward to safely remove particles from the array while looping.
+    for (let i = particlesArray.length - 1; i >= 0; i--) {
         particlesArray[i].update();
         particlesArray[i].draw();
-    }
 
-    ctx.globalCompositeOperation='source-over';
+        // If a particle's life is over, remove it from the array.
+        // This prevents the particles from respawning.
+        if (particlesArray[i].currentLife <= 0) {
+            particlesArray.splice(i, 1);
+        }
+    }
+    
+    // Resets the composite operation.
+    ctx.globalCompositeOperation = 'source-over';
+    
+    // Recursively calls the animate function to create the animation loop.
     requestAnimationFrame(animate);
 }
-animate();
+
+// Starts the animation loop on window load.
+window.onload = function() {
+    animate();
+}
 </script>
 </body>
 </html>
