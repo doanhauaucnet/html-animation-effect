@@ -40,18 +40,6 @@
         const core = new THREE.Mesh(coreGeometry, coreMaterial);
         scene.add(core);
 
-        // Glowing Core Halo (more impressive core)
-        const glowGeometry = new THREE.SphereGeometry(25, 32, 32);
-        const glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffffff, // Starts white for the glow effect
-            transparent: true,
-            opacity: 0.1,
-            blending: THREE.AdditiveBlending,
-            side: THREE.BackSide, // Render on the inside of the sphere
-        });
-        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-        scene.add(glow);
-
         // --- PARTICLE SYSTEM (main cloud) ---
         const particleCount = 75000; // Increased particle count for a denser effect
         const positions = new Float32Array(particleCount * 3); // (x, y, z) for each particle
@@ -195,7 +183,6 @@
             const coreColor = new THREE.Color().lerpColors(new THREE.Color(0x000000), new THREE.Color(0xffffff), currentPhase);
             core.material.color.copy(coreColor);
             core.scale.lerp(new THREE.Vector3(1 + currentPhase * 0.2, 1 + currentPhase * 0.2, 1 + currentPhase * 0.2), 0.05);
-            glow.scale.lerp(new THREE.Vector3(1 + currentPhase * 0.3, 1 + currentPhase * 0.3, 1 + currentPhase * 0.3), 0.05);
 
             for (let i = 0; i < particleCount; i++) {
                 const i3 = i * 3;
