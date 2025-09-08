@@ -3,55 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elemental Flow | Abstract Animation</title>
+    <title>Black Hole Particle Simulation</title>
     <style>
         /* Basic CSS reset to ensure the canvas fills the entire screen */
         body {
             margin: 0;
             overflow: hidden;
             background-color: #000000;
-            font-family: 'Inter', sans-serif;
         }
         canvas {
             display: block;
         }
-        /* Style for the title overlay */
-        .title {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 3rem;
-            font-weight: 200;
-            letter-spacing: 0.5rem;
-            text-align: center;
-            text-transform: uppercase;
-            opacity: 0.7;
-            pointer-events: none; /* Allows mouse events to pass through to the canvas */
-            text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
-        }
-        /* Responsive font size for smaller screens */
-        @media (max-width: 768px) {
-            .title {
-                font-size: 1.5rem;
-            }
-        }
     </style>
-    <!-- Google Fonts import for a clean, modern look -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200&display=swap" rel="stylesheet">
-</head>
-<body>
-    <!-- The title displayed over the animation -->
-    <div class="title">Elemental Flow</div>
-
-    <!-- The canvas element where the animation will be rendered -->
-    <canvas id="elemental-canvas"></canvas>
-
     <!-- Import the three.js library for 3D graphics -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <!-- The canvas element where the animation will be rendered -->
+    <canvas id="elemental-canvas"></canvas>
 
     <script>
         // --- SCENE SETUP ---
@@ -66,10 +35,30 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high-DPI screens
 
-        // --- PARTICLE SYSTEM ---
-        const particleCount = 50000; // Number of particles
+        // --- BLACK HOLE CORE ---
+        // The central black sphere of the black hole
+        const coreGeometry = new THREE.SphereGeometry(20, 32, 32);
+        const coreMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.95 });
+        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        scene.add(core);
+
+        // Glowing Core Halo (more impressive core)
+        const glowGeometry = new THREE.SphereGeometry(25, 32, 32);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff, // Starts white for the glow effect
+            transparent: true,
+            opacity: 0.1,
+            blending: THREE.AdditiveBlending,
+            side: THREE.BackSide, // Render on the inside of the sphere
+        });
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        scene.add(glow);
+
+        // --- PARTICLE SYSTEM (main cloud) ---
+        const particleCount = 75000; // Increased particle count for a denser effect
         const positions = new Float32Array(particleCount * 3); // (x, y, z) for each particle
         const colors = new Float32Array(particleCount * 3); // (r, g, b) for each particle
+        const originalPositions = new Float32Array(particleCount * 3); // Store initial positions
 
         const geometry = new THREE.BufferGeometry();
         const material = new THREE.PointsMaterial({
@@ -84,27 +73,68 @@
         const particles = new THREE.Points(geometry, material);
         scene.add(particles);
 
-        // --- MOUSE INTERACTION ---
-        const mouse = new THREE.Vector2(0, 0);
-        const targetMouse = new THREE.Vector2(0, 0);
-        const mouseRepelStrength = 150; // How strongly particles are pushed by the mouse
-
-        window.addEventListener('mousemove', (event) => {
-            // Normalize mouse coordinates (-1 to +1)
-            targetMouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            targetMouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        // Starfield background
+        const starCount = 5000;
+        const starPositions = new Float32Array(starCount * 3);
+        const starGeometry = new THREE.BufferGeometry();
+        const starMaterial = new THREE.PointsMaterial({
+            size: 1,
+            color: 0xffffff,
+            blending: THREE.AdditiveBlending
         });
+
+        for (let i = 0; i < starCount; i++) {
+            const i3 = i * 3;
+            const r = 800 + Math.random() * 200;
+            const theta = Math.random() * 2 * Math.PI;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            starPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
+            starPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+            starPositions[i3 + 2] = r * Math.cos(phi);
+        }
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+
+        // --- Cosmic Nebulae Background ---
+        const nebulaCount = 500;
+        const nebulaPositions = new Float32Array(nebulaCount * 3);
+        const nebulaColors = new Float32Array(nebulaCount * 3);
+        const nebulaGeometry = new THREE.BufferGeometry();
+        const nebulaMaterial = new THREE.PointsMaterial({
+            size: 50,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            opacity: 0.05,
+        });
+
+        const nebulaPalette = [
+            new THREE.Color(0x8a2be2), // Blue Violet
+            new THREE.Color(0xff4500), // Orange Red
+            new THREE.Color(0x00bfff), // Deep Sky Blue
+        ];
         
-        // Add touch support for mobile devices
-        window.addEventListener('touchmove', (event) => {
-            if (event.touches.length > 0) {
-                targetMouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
-                targetMouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
-            }
-        }, { passive: false });
+        for (let i = 0; i < nebulaCount; i++) {
+            const i3 = i * 3;
+            const r = 900 + Math.random() * 100;
+            const theta = Math.random() * 2 * Math.PI;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            nebulaPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
+            nebulaPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+            nebulaPositions[i3 + 2] = r * Math.cos(phi);
+            
+            const color = nebulaPalette[Math.floor(Math.random() * nebulaPalette.length)];
+            nebulaColors[i3] = color.r;
+            nebulaColors[i3 + 1] = color.g;
+            nebulaColors[i3 + 2] = color.b;
+        }
+        nebulaGeometry.setAttribute('position', new THREE.BufferAttribute(nebulaPositions, 3));
+        nebulaGeometry.setAttribute('color', new THREE.BufferAttribute(nebulaColors, 3));
+        const nebulae = new THREE.Points(nebulaGeometry, nebulaMaterial);
+        scene.add(nebulae);
 
-
-        // --- PARTICLE INITIALIZATION ---
+        // --- PARTICLE INITIALIZATION (main cloud) ---
         const particleData = [];
         const colorPalette = [
             new THREE.Color(0xff4500), // Fiery Orange
@@ -120,17 +150,25 @@
             const theta = Math.random() * 2 * Math.PI;
             const phi = Math.acos((Math.random() * 2) - 1);
             const r = Math.random() * 400 + 50;
-            
-            positions[i3] = r * Math.sin(phi) * Math.cos(theta);
-            positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-            positions[i3 + 2] = r * Math.cos(phi);
+
+            const x = r * Math.sin(phi) * Math.cos(theta);
+            const y = r * Math.sin(phi) * Math.sin(theta);
+            const z = r * Math.cos(phi);
+
+            positions[i3] = x;
+            positions[i3 + 1] = y;
+            positions[i3 + 2] = z;
+
+            originalPositions[i3] = x;
+            originalPositions[i3 + 1] = y;
+            originalPositions[i3 + 2] = z;
 
             // Assign a random color from the palette
             const color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
             colors[i3] = color.r;
             colors[i3 + 1] = color.g;
             colors[i3 + 2] = color.b;
-            
+
             // Store original position and velocity for animation
             particleData.push({
                 velocity: new THREE.Vector3(
@@ -138,8 +176,7 @@
                     (Math.random() - 0.5) * 0.1,
                     (Math.random() - 0.5) * 0.1
                 ),
-                originalPos: new THREE.Vector3(positions[i3], positions[i3 + 1], positions[i3 + 2]),
-                wander: Math.random() * 2 + 1, // Unique wander factor for each particle
+                originalPos: new THREE.Vector3(x, y, z), // Store original position for reset
             });
         }
 
@@ -147,12 +184,32 @@
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-        // --- ANIMATION LOOP ---
+        // --- MOUSE INTERACTION FOR PARTICLE REPEL ---
+        const mouse = new THREE.Vector2(0, 0);
+        const targetMouse = new THREE.Vector2(0, 0);
+        const mouseRepelStrength = 150; // How strongly particles are pushed by the mouse
+        
+        window.addEventListener('mousemove', (event) => {
+            // Normalize mouse coordinates (-1 to +1)
+            targetMouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            targetMouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        });
+        
+        // Add touch support for mobile devices
+        window.addEventListener('touchmove', (event) => {
+            if (event.touches.length > 0) {
+                targetMouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+                targetMouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+            }
+        }, { passive: false });
+
+
+        // --- ANIMATION LOOP & BLACK HOLE LOGIC ---
         const clock = new THREE.Clock();
+        let phase = 0; // 0 = pulling, 1 = pushing
 
         function animate() {
             requestAnimationFrame(animate);
-
             const elapsedTime = clock.getElapsedTime();
             const positions = particles.geometry.attributes.position.array;
             
@@ -162,25 +219,36 @@
             
             // Convert normalized mouse coords to world coords
             const mouseWorld = new THREE.Vector3(mouse.x * (window.innerWidth/4), mouse.y * (window.innerHeight/4), 0);
-            
-            // Update each particle's position
+
+            // Update core color and scale based on phase
+            phase = (Math.sin(elapsedTime * 0.3) + 1) / 2; // Slower oscillation
+            const coreColor = new THREE.Color().lerpColors(new THREE.Color(0x000000), new THREE.Color(0xffffff), phase);
+            core.material.color.copy(coreColor);
+            core.scale.lerp(new THREE.Vector3(1 + phase * 0.2, 1 + phase * 0.2, 1 + phase * 0.2), 0.05);
+            glow.scale.lerp(new THREE.Vector3(1 + phase * 0.3, 1 + phase * 0.3, 1 + phase * 0.3), 0.05);
+
             for (let i = 0; i < particleCount; i++) {
                 const i3 = i * 3;
-                
                 const pData = particleData[i];
                 const pos = new THREE.Vector3(positions[i3], positions[i3 + 1], positions[i3 + 2]);
-                
-                // --- Noise-based movement for an organic feel ---
-                // The sine and cosine waves create a swirling, flowing motion
-                const noiseX = Math.sin(elapsedTime * 0.5 + pData.wander) * 0.5;
-                const noiseY = Math.cos(elapsedTime * 0.5 + pData.wander) * 0.5;
-                const noiseZ = Math.sin(elapsedTime * 0.5 + pData.originalPos.z * 0.1) * 0.5;
+                const originalPos = pData.originalPos;
 
-                pData.velocity.x += noiseX * 0.005;
-                pData.velocity.y += noiseY * 0.005;
-                pData.velocity.z += noiseZ * 0.005;
+                // --- Black Hole Interaction ---
+                const dirToCore = new THREE.Vector3().subVectors(new THREE.Vector3(0, 0, 0), pos).normalize();
+                const distanceToCore = pos.length() + 0.1;
+                let coreForce;
+
+                if (phase < 0.5) {
+                    // Pulling phase
+                    coreForce = -10 / (distanceToCore * 0.01 + 1);
+                } else {
+                    // Pushing phase
+                    coreForce = 10 / (distanceToCore * 0.01 + 1);
+                }
+
+                pData.velocity.add(dirToCore.multiplyScalar(coreForce * 0.02)); // Reduced multiplier
                 
-                // --- Mouse interaction ---
+                // --- Mouse Repel Interaction ---
                 const distanceToMouse = pos.distanceTo(mouseWorld);
                 if (distanceToMouse < mouseRepelStrength) {
                     const repelForce = (mouseRepelStrength - distanceToMouse) / mouseRepelStrength;
@@ -188,8 +256,14 @@
                     pData.velocity.add(repelVector.multiplyScalar(repelForce * 0.5));
                 }
 
-                // --- Damping and applying velocity ---
-                pData.velocity.multiplyScalar(0.96); // Friction/damping to prevent infinite speed
+                // Add a gentle return force to the original position
+                const returnForce = new THREE.Vector3().subVectors(originalPos, pos).multiplyScalar(0.0001);
+                pData.velocity.add(returnForce);
+                
+                // Damping to slow down particles
+                pData.velocity.multiplyScalar(0.97);
+
+                // Update particle positions
                 positions[i3] += pData.velocity.x;
                 positions[i3 + 1] += pData.velocity.y;
                 positions[i3 + 2] += pData.velocity.z;
@@ -198,9 +272,13 @@
             // Mark the position attribute as needing an update
             particles.geometry.attributes.position.needsUpdate = true;
             
-            // Rotate the entire particle system for a cosmic feel
+            // Rotate the particle systems
             particles.rotation.y = elapsedTime * 0.05;
             particles.rotation.x = elapsedTime * 0.02;
+            stars.rotation.y = elapsedTime * 0.01;
+            stars.rotation.x = elapsedTime * 0.005;
+            nebulae.rotation.y = elapsedTime * 0.005;
+            nebulae.rotation.x = elapsedTime * 0.002;
 
             renderer.render(scene, camera);
         }
