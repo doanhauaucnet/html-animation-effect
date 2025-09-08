@@ -1,282 +1,267 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Interactive Matrix Rain</title>
     <style>
-        /* Basic reset and styling for the page */
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #000000; /* Black background for the Matrix theme */
-            font-family: 'Courier New', Courier, monospace; /* A more fitting font */
-        }
-
-        /* Canvas should fill the entire screen */
-        canvas {
-            display: block;
-            cursor: crosshair;
-        }
-
-        /* Styling for the title overlay */
-        .overlay-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: rgba(0, 255, 70, 0.9);
-            text-align: center;
-            pointer-events: none; /* Allows mouse events to pass through to the canvas */
-            user-select: none;
-        }
-
+      /* Basic reset and styling for the page */
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #000000; /* Black background for the Matrix theme */
+        font-family: "Courier New", Courier, monospace; /* A more fitting font */
+      }
+      /* Canvas should fill the entire screen */
+      canvas {
+        display: block;
+      }
+      /* Styling for the title overlay */
+      .overlay-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: rgba(0, 255, 70, 0.9);
+        text-align: center;
+        pointer-events: none; /* Allows mouse events to pass through to the canvas */
+        user-select: none;
+      }
+      .overlay-text h1 {
+        font-size: 4rem;
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: 2px;
+        text-shadow: 0 0 15px rgba(0, 255, 70, 0.5),
+          0 0 25px rgba(0, 255, 70, 0.3);
+      }
+      /* Media query for smaller screens */
+      @media (max-width: 768px) {
         .overlay-text h1 {
-            font-size: 4rem;
-            margin: 0;
-            font-weight: 600;
-            letter-spacing: 2px;
-            text-shadow: 0 0 15px rgba(0, 255, 70, 0.5), 0 0 25px rgba(0, 255, 70, 0.3);
+          font-size: 2.5rem;
         }
-        
-        /* Media query for smaller screens */
-        @media (max-width: 768px) {
-            .overlay-text h1 {
-                font-size: 2.5rem;
-            }
-            .overlay-text p {
-                font-size: 1rem;
-            }
+        .overlay-text p {
+          font-size: 1rem;
         }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <canvas id="matrixCanvas"></canvas>
     <div class="overlay-text">
-        <h1>The Matrix</h1>
+      <h1>The Matrix</h1>
     </div>
-
     <script>
-        const canvas = document.getElementById('matrixCanvas');
-        const ctx = canvas.getContext('2d');
-
-        // --- Configuration ---
-        const PARTICLE_COUNT = 300; 
-        const BASE_SPEED = 1.5;
-        const PARTICLE_COLORS = [
-            'rgba(0, 255, 70, 0.9)', 
-            'rgba(0, 200, 60, 0.9)',
-            'rgba(0, 150, 40, 0.9)',
-            'rgba(50, 255, 100, 0.9)'
-        ];
-
-        let particles = [];
-        let glitchEffects = [];
-        let explosionParticles = [];
-
-        // --- Mouse Interaction State ---
-        let mouse = {
-            x: null,
-            y: null,
-            isDown: false,
-            isDragging: false
-        };
-
-        // Function to set canvas size to fill the window
-        function setCanvasSize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+      const canvas = document.getElementById("matrixCanvas");
+      const ctx = canvas.getContext("2d");
+      // --- Configuration ---
+      const PARTICLE_COUNT = 300;
+      const BASE_SPEED = 1.5;
+      const PARTICLE_COLORS = [
+        "rgba(0, 255, 70, 0.9)",
+        "rgba(0, 200, 60, 0.9)",
+        "rgba(0, 150, 40, 0.9)",
+        "rgba(50, 255, 100, 0.9)",
+      ];
+      const GLITCH_COLOR = "rgba(255, 0, 0, 0.9)";
+      let particles = [];
+      let glitchEffects = [];
+      let explosionParticles = [];
+      // --- Mouse Interaction State ---
+      let mouse = {
+        x: null,
+        y: null,
+        isDown: false,
+        isDragging: false,
+      };
+      // Function to set canvas size to fill the window
+      function setCanvasSize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      // --- Glitch Effect Class ---
+      class GlitchEffect {
+        constructor(x, y) {
+          this.x = x;
+          this.y = y;
+          this.radius = 10; // Reduced initial radius
+          this.maxRadius = 100; // Reduced max radius for smaller corruption area
+          this.life = 1; // 1 = 100% life
         }
-
-        // --- Glitch Effect Class ---
-        class GlitchEffect {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.radius = 20;
-                this.maxRadius = 250;
-                this.life = 1; // 1 = 100% life
-            }
-            update() {
-                this.radius += (this.maxRadius - this.radius) * 0.05;
-                this.life -= 0.02;
-            }
+        update() {
+          this.radius += (this.maxRadius - this.radius) * 0.05;
+          this.life -= 0.02;
         }
-        
-        // --- Main Particle Class Definition ---
-        class Particle {
-            constructor(x, y, directionY, size, color) {
-                this.x = x;
-                this.y = y;
-                this.originX = x;
-                this.originY = y;
-                this.directionY = directionY;
-                this.size = size;
-                this.color = color;
-                this.char = String.fromCharCode(0x30A0 + Math.random() * 96); // Katakana characters
-            }
-
-            draw() {
-                ctx.font = `${this.size}px "Courier New"`;
-                ctx.fillStyle = this.color;
-                ctx.shadowColor = this.color;
-                ctx.shadowBlur = 10;
-                ctx.fillText(this.char, this.x, this.y);
-                ctx.shadowBlur = 0;
-            }
-
-            update() {
-                // Interaction effects
-                if (mouse.x && mouse.y) {
-                    const dx = this.x - mouse.x;
-                    const dy = this.y - mouse.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    const forceDirectionX = dx / distance;
-                    const forceDirectionY = dy / distance;
-                    const maxDistance = 100;
-                    const force = (maxDistance - distance) / maxDistance;
-
-                    // Mouse move ripple
-                    if (distance < maxDistance) {
-                        this.x += forceDirectionX * force * 2;
-                        this.y += forceDirectionY * force * 2;
-                    }
-                    // Mouse drag vortex
-                    if (mouse.isDragging && distance < 200) {
-                         this.x -= forceDirectionX * force * 3;
-                         this.y -= forceDirectionY * force * 3;
-                    }
-                }
-                
-                // Return to original path
-                this.x += (this.originX - this.x) * 0.05;
-                
-                // Glitch effect
-                 glitchEffects.forEach(glitch => {
-                    const dx = this.x - glitch.x;
-                    const dy = this.y - glitch.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < glitch.radius && glitch.life > 0) {
-                        if (Math.random() > 0.95) {
-                            this.char = String.fromCharCode(0x30A0 + Math.random() * 96);
-                        }
-                    }
-                });
-
-
-                // Reset particle
-                if (this.y > canvas.height) {
-                    this.y = 0;
-                    this.x = Math.random() * canvas.width;
-                    this.originX = this.x;
-                    this.char = String.fromCharCode(0x30A0 + Math.random() * 96);
-                }
-                
-                this.y += this.directionY;
-                this.draw();
-            }
+      }
+      // --- Main Particle Class Definition ---
+      class Particle {
+        constructor(x, y, directionY, size, color) {
+          this.x = x;
+          this.y = y;
+          this.originX = x;
+          this.originY = y;
+          this.directionY = directionY;
+          this.size = size;
+          this.color = color;
+          this.originalColor = color;
+          this.char = String.fromCharCode(0x30a0 + Math.random() * 96); // Katakana characters
+          this.isGlitching = false;
         }
-
-        // --- Explosion Particle Class ---
-        class ExplosionParticle extends Particle {
-             constructor(x, y, size, color) {
-                super(x, y, 0, size, color); // directionY is handled differently
-                this.speed = Math.random() * 5 + 2;
-                this.angle = Math.random() * Math.PI * 2;
-                this.friction = 0.95;
-                this.life = 1;
-             }
-             
-             update() {
-                this.x += Math.cos(this.angle) * this.speed;
-                this.y += Math.sin(this.angle) * this.speed;
-                this.speed *= this.friction;
-                this.life -= 0.02;
-                if(this.life > 0) {
-                   this.draw();
-                }
-             }
+        draw() {
+          ctx.font = `${this.size}px "Courier New"`;
+          ctx.fillStyle = this.color;
+          ctx.shadowColor = this.color;
+          ctx.shadowBlur = 10;
+          ctx.fillText(this.char, this.x, this.y);
+          ctx.shadowBlur = 0;
         }
-
-        // --- Initialization ---
-        function init() {
-            particles = [];
-            let particleDensity = (canvas.width * canvas.height) / 5000;
-            for (let i = 0; i < particleDensity && i < PARTICLE_COUNT; i++) {
-                let size = Math.random() * 15 + 5;
-                let x = Math.random() * canvas.width;
-                let y = Math.random() * canvas.height;
-                let directionY = (Math.random() * BASE_SPEED) + 1;
-                let color = PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)];
-                particles.push(new Particle(x, y, directionY, size, color));
+        update() {
+          // Interaction effects
+          if (mouse.x && mouse.y) {
+            const dx = this.x - mouse.x;
+            const dy = this.y - mouse.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const forceDirectionX = dx / distance;
+            const forceDirectionY = dy / distance;
+            const maxDistance = 100;
+            const force = (maxDistance - distance) / maxDistance;
+            // Mouse move ripple
+            if (distance < maxDistance) {
+              this.x += forceDirectionX * force * 2;
+              this.y += forceDirectionY * force * 2;
             }
-        }
-        
-        // --- Animation Loop ---
-        function animate() {
-            requestAnimationFrame(animate);
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            particles.forEach(p => p.update());
-
-            glitchEffects = glitchEffects.filter(g => g.life > 0);
-            glitchEffects.forEach(g => g.update());
-            
-            explosionParticles = explosionParticles.filter(p => p.life > 0);
-            explosionParticles.forEach(p => p.update());
-        }
-
-        // --- Event Listeners ---
-        window.addEventListener('resize', () => {
-            setCanvasSize();
-            init();
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            mouse.x = e.x;
-            mouse.y = e.y;
-            if (mouse.isDown) {
-                mouse.isDragging = true;
+            // Mouse drag vortex
+            if (mouse.isDragging && distance < 200) {
+              this.x -= forceDirectionX * force * 3;
+              this.y -= forceDirectionY * force * 3;
             }
-        });
-        
-        canvas.addEventListener('mousedown', (e) => {
-             mouse.isDown = true;
-             // Left click
-             if (e.button === 0) {
-                 glitchEffects.push(new GlitchEffect(e.x, e.y));
-             }
-             // Right click
-             if (e.button === 2) {
-                 for(let i=0; i < 30; i++) {
-                    let size = Math.random() * 10 + 2;
-                    let color = PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)];
-                    explosionParticles.push(new ExplosionParticle(e.x, e.y, size, color));
-                 }
-             }
-        });
-        
-        canvas.addEventListener('mouseup', () => {
-             mouse.isDown = false;
-             mouse.isDragging = false;
-        });
-        
-        canvas.addEventListener('mouseout', () => {
-            mouse.x = null;
-            mouse.y = null;
-            mouse.isDown = false;
-            mouse.isDragging = false;
-        });
-
-        // Prevent context menu on right click
-        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
-        // --- Start ---
+          }
+          // Return to original path
+          this.x += (this.originX - this.x) * 0.05;
+          // Glitch effect from click
+          glitchEffects.forEach((glitch) => {
+            const dx = this.x - glitch.x;
+            const dy = this.y - glitch.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < glitch.radius && glitch.life > 0) {
+              this.isGlitching = true;
+            }
+          });
+          // Check if the particle is currently glitching
+          if (this.isGlitching) {
+              // Rapidly change character and color
+              if (Math.random() > 0.85) {
+                this.char = String.fromCharCode(0x30a0 + Math.random() * 96);
+              }
+              this.color = GLITCH_COLOR;
+          }
+          // Reset particle
+          if (this.y > canvas.height) {
+            this.y = 0;
+            this.x = Math.random() * canvas.width;
+            this.originX = this.x;
+            this.char = String.fromCharCode(0x30a0 + Math.random() * 96);
+            this.isGlitching = false;
+            this.color = this.originalColor;
+          }
+          this.y += this.directionY;
+          this.draw();
+        }
+      }
+      // --- Explosion Particle Class ---
+      class ExplosionParticle extends Particle {
+        constructor(x, y, size, color) {
+          const directionY = Math.random() * 2 + 1; // downward speed
+          super(x, y, directionY, size, color);
+          this.speed = Math.random() * 5 + 2;
+          this.angle = Math.random() * Math.PI * 2;
+          this.friction = 0.95;
+          this.life = 1;
+        }
+        update() {
+          // Spread effect like explosion
+          this.x += Math.cos(this.angle) * this.speed;
+          this.y += Math.sin(this.angle) * this.speed;
+          this.speed *= this.friction;
+          this.y += this.directionY;
+          if (this.y > canvas.height) this.life = 0;
+          this.life -= 0.001;
+          if (this.life > 0) this.draw();
+        }
+      }
+      // --- Initialization ---
+      function init() {
+        particles = [];
+        let particleDensity = (canvas.width * canvas.height) / 5000;
+        for (let i = 0; i < particleDensity && i < PARTICLE_COUNT; i++) {
+          let size = Math.random() * 15 + 5;
+          let x = Math.random() * canvas.width;
+          let y = Math.random() * canvas.height;
+          let directionY = Math.random() * BASE_SPEED + 1;
+          let color =
+            PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)];
+          particles.push(new Particle(x, y, directionY, size, color));
+        }
+      }
+      // --- Animation Loop ---
+      function animate() {
+        requestAnimationFrame(animate);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        particles.forEach((p) => p.update());
+        glitchEffects = glitchEffects.filter((g) => g.life > 0);
+        glitchEffects.forEach((g) => g.update());
+        explosionParticles = explosionParticles.filter((p) => p.life > 0);
+        explosionParticles.forEach((p) => p.update());
+      }
+      // --- Event Listeners ---
+      window.addEventListener("resize", () => {
         setCanvasSize();
         init();
-        animate();
+      });
+      canvas.addEventListener("mousemove", (e) => {
+        mouse.x = e.x;
+        mouse.y = e.y;
+        if (mouse.isDown) {
+          mouse.isDragging = true;
+        }
+      });
+      canvas.addEventListener("mousedown", (e) => {
+        mouse.isDown = true;
+        // Left click
+        if (e.button === 0) {
+          glitchEffects.push(new GlitchEffect(e.x, e.y));
+        }
+        // Right click
+        if (e.button === 2) {
+          for (let i = 0; i < 30; i++) {
+            let size = Math.random() * 10 + 2;
+            let color =
+              PARTICLE_COLORS[
+                Math.floor(Math.random() * PARTICLE_COLORS.length)
+              ];
+            explosionParticles.push(
+              new ExplosionParticle(e.x, e.y, size, color)
+            );
+          }
+        }
+      });
+      canvas.addEventListener("mouseup", () => {
+        mouse.isDown = false;
+        mouse.isDragging = false;
+      });
+      canvas.addEventListener("mouseout", () => {
+        mouse.x = null;
+        mouse.y = null;
+        mouse.isDown = false;
+        mouse.isDragging = false;
+      });
+      // Prevent context menu on right click
+      canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+      // --- Start ---
+      setCanvasSize();
+      init();
+      animate();
     </script>
-</body>
+  </body>
 </html>
-
