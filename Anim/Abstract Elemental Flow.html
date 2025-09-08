@@ -15,11 +15,9 @@
             display: block;
         }
     </style>
-    <!-- Import the three.js library for 3D graphics -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <!-- The canvas element where the animation will be rendered -->
     <canvas id="elemental-canvas"></canvas>
 
     <script>
@@ -165,10 +163,18 @@
             }
         }, { passive: false });
 
+        // --- CUSTOM LOGIC FOR STATE CHANGE ON CLICK ---
+        let isPulling = true; // State flag: true = pulling, false = pushing
+        let targetPhase = 0; // 0 for pulling, 1 for pushing
+        let currentPhase = 0;
+
+        window.addEventListener('click', () => {
+            isPulling = !isPulling; // Toggle the state on each click
+            targetPhase = isPulling ? 0 : 1;
+        });
 
         // --- ANIMATION LOOP & BLACK HOLE LOGIC ---
         const clock = new THREE.Clock();
-        let phase = 0; // 0 = pulling, 1 = pushing
 
         function animate() {
             requestAnimationFrame(animate);
@@ -182,12 +188,14 @@
             // Convert normalized mouse coords to world coords
             const mouseWorld = new THREE.Vector3(mouse.x * (window.innerWidth/4), mouse.y * (window.innerHeight/4), 0);
 
+            // Smoothly transition between phases
+            currentPhase += (targetPhase - currentPhase) * 0.05;
+
             // Update core color and scale based on phase
-            phase = (Math.sin(elapsedTime * 0.3) + 1) / 2; // Slower oscillation
-            const coreColor = new THREE.Color().lerpColors(new THREE.Color(0x000000), new THREE.Color(0xffffff), phase);
+            const coreColor = new THREE.Color().lerpColors(new THREE.Color(0x000000), new THREE.Color(0xffffff), currentPhase);
             core.material.color.copy(coreColor);
-            core.scale.lerp(new THREE.Vector3(1 + phase * 0.2, 1 + phase * 0.2, 1 + phase * 0.2), 0.05);
-            glow.scale.lerp(new THREE.Vector3(1 + phase * 0.3, 1 + phase * 0.3, 1 + phase * 0.3), 0.05);
+            core.scale.lerp(new THREE.Vector3(1 + currentPhase * 0.2, 1 + currentPhase * 0.2, 1 + currentPhase * 0.2), 0.05);
+            glow.scale.lerp(new THREE.Vector3(1 + currentPhase * 0.3, 1 + currentPhase * 0.3, 1 + currentPhase * 0.3), 0.05);
 
             for (let i = 0; i < particleCount; i++) {
                 const i3 = i * 3;
@@ -200,7 +208,8 @@
                 const distanceToCore = pos.length() + 0.1;
                 let coreForce;
 
-                if (phase < 0.5) {
+                // Use the `isPulling` flag to determine the force direction
+                if (isPulling) {
                     // Pulling phase
                     coreForce = -10 / (distanceToCore * 0.01 + 1);
                 } else {
