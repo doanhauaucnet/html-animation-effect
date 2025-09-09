@@ -5,47 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interactive Stardust Visualization</title>
     <style>
-        /* Basic reset and styling for the page */
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #02010a; /* A very dark indigo for the background */
+            background-color: #02010a; /* Deep dark indigo */
             font-family: 'Inter', sans-serif;
         }
 
-        /* Canvas should fill the entire screen */
         canvas {
             display: block;
         }
-
-        /* Styling for the title overlay */
-        .overlay-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: rgba(255, 255, 255, 0.9);
-            text-align: center;
-            pointer-events: none; /* Allows mouse events to pass through to the canvas */
-            user-select: none;
-        }
-
-        .overlay-text h1 {
-            font-size: 4rem;
-            margin: 0;
-            font-weight: 600;
-            letter-spacing: 2px;
-            text-shadow: 0 0 15px rgba(236, 173, 255, 0.5), 0 0 25px rgba(236, 173, 255, 0.3);
-        }
-
-        .overlay-text p {
-            font-size: 1.2rem;
-            margin-top: 10px;
-            font-weight: 300;
-             text-shadow: 0 0 10px rgba(236, 173, 255, 0.4);
-        }
         
-        /* Media query for smaller screens */
         @media (max-width: 768px) {
             .overlay-text h1 {
                 font-size: 2.5rem;
@@ -61,106 +31,115 @@
 </head>
 <body>
     <canvas id="stardustCanvas"></canvas>
-    <div class="overlay-text">
-        <h1>Stardust</h1>
-        <p>Move your mouse to interact</p>
-    </div>
 
     <script>
         const canvas = document.getElementById('stardustCanvas');
         const ctx = canvas.getContext('2d');
 
-        // --- Configuration ---
         const PARTICLE_COUNT = 150;
-        const MAX_LINE_DISTANCE = 120; // How close particles need to be to connect
-        const MOUSE_INTERACTION_RADIUS = 200; // The radius around the mouse that affects particles
+        const MAX_LINE_DISTANCE = 120;
+        const MOUSE_INTERACTION_RADIUS = 200;
         const BASE_SPEED = 0.5;
-        // A vibrant color palette for our stardust particles
+        const FOLLOW_THRESHOLD = 80;  // max distance a particle shifts toward mouse
+
         const PARTICLE_COLORS = [
-            'rgba(255, 77, 133, 0.9)', // Hot Pink
-            'rgba(155, 77, 255, 0.9)', // Purple
-            'rgba(77, 181, 255, 0.9)', // Light Blue
-            'rgba(255, 217, 77, 0.9)', // Gold
-            'rgba(240, 240, 250, 0.9)'  // White
+            'rgba(255, 77, 133, 0.9)', 
+            'rgba(155, 77, 255, 0.9)', 
+            'rgba(77, 181, 255, 0.9)', 
+            'rgba(255, 217, 77, 0.9)', 
+            'rgba(240, 240, 250, 0.9)'  
         ];
 
         let particles = [];
-        let mouse = {
-            x: null,
-            y: null
-        };
+        let mouse = { x: null, y: null };
 
-        // Function to set canvas size to fill the window
         function setCanvasSize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         }
 
-        // Particle class definition
         class Particle {
             constructor(x, y, directionX, directionY, radius, color) {
                 this.x = x;
                 this.y = y;
+                this.baseX = x;
+                this.baseY = y;
                 this.directionX = directionX;
                 this.directionY = directionY;
                 this.radius = radius;
                 this.color = color;
             }
 
-            // Method to draw the particle on the canvas with a glow
             draw() {
                 ctx.beginPath();
-                // Add a glowing effect
                 ctx.shadowColor = this.color;
                 ctx.shadowBlur = 10;
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
                 ctx.fillStyle = this.color;
                 ctx.fill();
                 ctx.closePath();
-                // Reset shadow blur for other elements
                 ctx.shadowBlur = 0;
             }
 
-            // Method to update the particle's position and handle wall collision
             update() {
-                // Bounce off the screen edges
+                // Bounce off edges
                 if (this.x + this.radius > canvas.width || this.x - this.radius < 0) {
                     this.directionX = -this.directionX;
                 }
                 if (this.y + this.radius > canvas.height || this.y - this.radius < 0) {
                     this.directionY = -this.directionY;
                 }
-                
-                // Move the particle
+
                 this.x += this.directionX;
                 this.y += this.directionY;
-                
+
+                // --- Parallax Effect with Threshold ---
+                if (mouse.x !== null && mouse.y !== null) {
+                    let dx = mouse.x - this.baseX;
+                    let dy = mouse.y - this.baseY;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < canvas.width) {
+                        // Effect strength decreases with distance
+                        let effectStrength = Math.max(0, 1 - dist / (canvas.width * 0.8));
+                        // Calculate target position (limited to FOLLOW_THRESHOLD)
+                        let angle = Math.atan2(dy, dx);
+                        let limitedDx = Math.cos(angle) * Math.min(FOLLOW_THRESHOLD, Math.abs(dx));
+                        let limitedDy = Math.sin(angle) * Math.min(FOLLOW_THRESHOLD, Math.abs(dy));
+
+                        let targetX = this.baseX + limitedDx * effectStrength;
+                        let targetY = this.baseY + limitedDy * effectStrength;
+
+                        // Smooth follow
+                        this.x += (targetX - this.x) * 0.05;
+                        this.y += (targetY - this.y) * 0.05;
+                    }
+                } else {
+                    // Drift back to base when no mouse
+                    this.x += (this.baseX - this.x) * 0.02;
+                    this.y += (this.baseY - this.y) * 0.02;
+                }
+
                 this.draw();
             }
         }
 
-        // --- Initialization ---
         function init() {
             particles = [];
-            // Create particles based on screen size for responsiveness
             let particleDensity = (canvas.height * canvas.width) / 9000;
             for (let i = 0; i < particleDensity && i < PARTICLE_COUNT; i++) {
                 let radius = Math.random() * 2 + 1;
                 let x = Math.random() * (canvas.width - radius * 2) + radius;
                 let y = Math.random() * (canvas.height - radius * 2) + radius;
-                // Randomize speed slightly for more organic movement
                 let directionX = (Math.random() - 0.5) * (Math.random() * BASE_SPEED + 0.1);
                 let directionY = (Math.random() - 0.5) * (Math.random() * BASE_SPEED + 0.1);
-                // Pick a random color from our palette
                 let color = PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)];
                 particles.push(new Particle(x, y, directionX, directionY, radius, color));
             }
         }
 
-        // --- Connection Logic ---
         function connect() {
             for (let i = 0; i < particles.length; i++) {
-                // Compare with other particles
                 for (let j = i + 1; j < particles.length; j++) {
                     let dx = particles[i].x - particles[j].x;
                     let dy = particles[i].y - particles[j].y;
@@ -168,7 +147,7 @@
 
                     if (distance < MAX_LINE_DISTANCE) {
                         let opacity = 1 - (distance / MAX_LINE_DISTANCE);
-                        ctx.strokeStyle = `rgba(255, 229, 180, ${opacity * 0.4})`; // Soft gold for lines
+                        ctx.strokeStyle = `rgba(255, 229, 180, ${opacity * 0.4})`;
                         ctx.lineWidth = 1;
                         ctx.beginPath();
                         ctx.moveTo(particles[i].x, particles[i].y);
@@ -177,7 +156,7 @@
                         ctx.closePath();
                     }
                 }
-                 // Compare with mouse position
+
                 if (mouse.x !== null && mouse.y !== null) {
                     let dx = particles[i].x - mouse.x;
                     let dy = particles[i].y - mouse.y;
@@ -185,7 +164,7 @@
 
                     if (distance < MOUSE_INTERACTION_RADIUS) {
                         let opacity = 1 - (distance / MOUSE_INTERACTION_RADIUS);
-                        ctx.strokeStyle = `rgba(255, 229, 180, ${opacity * 0.8})`; // Brighter gold for mouse interaction
+                        ctx.strokeStyle = `rgba(255, 229, 180, ${opacity * 0.8})`;
                         ctx.lineWidth = 1;
                         ctx.beginPath();
                         ctx.moveTo(particles[i].x, particles[i].y);
@@ -197,7 +176,6 @@
             }
         }
 
-        // --- Animation Loop ---
         function animate() {
             requestAnimationFrame(animate);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -208,10 +186,9 @@
             connect();
         }
 
-        // --- Event Listeners ---
         window.addEventListener('resize', () => {
             setCanvasSize();
-            init(); // Re-initialize particles on resize
+            init();
         });
 
         window.addEventListener('mousemove', (event) => {
@@ -219,17 +196,14 @@
             mouse.y = event.y;
         });
         
-        // Remove mouse position when it leaves the window
         window.addEventListener('mouseout', () => {
             mouse.x = null;
             mouse.y = null;
         });
 
-        // --- Start ---
         setCanvasSize();
         init();
         animate();
     </script>
 </body>
 </html>
-

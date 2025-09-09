@@ -25,8 +25,11 @@ canvas.height = window.innerHeight;
 
 const particles = [];
 const particleCount = 300;
+let particlesToSpawn = particleCount;
 const mouse = { x: canvas.width/2, y: canvas.height/2, radius: 120, isDown: false };
 let hueShift = 0;
+let lastCometTime = 0; 
+let initialFrames = 60; // frames to limit heavy effects at start
 
 // --- Particle system ---
 class Particle {
@@ -43,6 +46,7 @@ class Particle {
     this.colorHue = Math.random()*360;
     this.orbitOffset = Math.random() * Math.PI*2;
     this.pulseSpeed = 0.002 + Math.random()*0.002;
+    this.opacity = 0.5;
   }
   update() {
     this.angle += this.speed;
@@ -75,13 +79,24 @@ class Particle {
     ctx.beginPath();
     ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
     ctx.fillStyle = `hsla(${this.colorHue+hueShift},80%,60%,${this.opacity})`;
-    ctx.shadowColor = `hsla(${this.colorHue+hueShift},80%,70%,1)`;
-    ctx.shadowBlur = 15;
+    if(initialFrames <= 0) {
+      ctx.shadowColor = `hsla(${this.colorHue+hueShift},80%,70%,1)`;
+      ctx.shadowBlur = 15;
+    }
     ctx.fill();
     ctx.shadowBlur = 0;
   }
 }
-for(let i=0;i<particleCount;i++) particles.push(new Particle());
+
+// Gradual particle spawn
+function spawnParticles() {
+  if(particlesToSpawn > 0){
+    particles.push(new Particle());
+    particlesToSpawn--;
+    setTimeout(spawnParticles, 5); // spawn one every 5ms
+  }
+}
+spawnParticles();
 
 // --- Impact flash system ---
 class ImpactFlash {
@@ -115,10 +130,8 @@ let flashes=[];
 
 class CometTrailParticle {
   constructor(x, y, colorHue) {
-    this.x = x;
-    this.y = y;
-    this.vx = 0;
-    this.vy = 0;
+    this.x = x; this.y = y;
+    this.vx = 0; this.vy = 0;
     this.radius = Math.random() * 2 + 1;
     this.colorHue = colorHue;
     this.alpha = 1;
@@ -126,7 +139,7 @@ class CometTrailParticle {
   update() {
     this.x += this.vx;
     this.y += this.vy;
-    this.alpha *= 0.92; // fade out
+    this.alpha *= 0.92;
   }
   draw() {
     if(this.alpha < 0.05) return;
@@ -139,15 +152,11 @@ class CometTrailParticle {
     ctx.shadowBlur = 0;
   }
 }
+
 // --- Comet system ---
 class Comet {
-  constructor() {
-    let side = Math.floor(Math.random()*4);
-    if(side===0){ this.x=-50; this.y=Math.random()*canvas.height; }
-    else if(side===1){ this.x=canvas.width+50; this.y=Math.random()*canvas.height; }
-    else if(side===2){ this.x=Math.random()*canvas.width; this.y=-50; }
-    else { this.x=Math.random()*canvas.width; this.y=canvas.height+50; }
-
+  constructor(x, y) {
+    this.x = x; this.y = y;
     this.tx = canvas.width/2;
     this.ty = canvas.height/2;
     let dx=this.tx-this.x, dy=this.ty-this.y;
@@ -158,38 +167,25 @@ class Comet {
     this.active=true;
     this.colorHue=200+Math.random()*100;
   }
-
   update() {
     if(!this.active) return;
-
-    // Spawn trail particle
     let trail = new CometTrailParticle(this.x, this.y, this.colorHue);
-    trail.vx = -this.vx*0.3 + (Math.random()-0.5)*1; // subtle spread
+    trail.vx = -this.vx*0.3 + (Math.random()-0.5)*1;
     trail.vy = -this.vy*0.3 + (Math.random()-0.5)*1;
     this.trailParticles.push(trail);
     if(this.trailParticles.length > 50) this.trailParticles.shift();
-
-    // Update trail particles
     for(let t of this.trailParticles) t.update();
-
-    // Move comet
     this.x += this.vx;
     this.y += this.vy;
-
     let dx=this.x-canvas.width/2, dy=this.y-canvas.height/2;
     if(Math.sqrt(dx*dx+dy*dy)<80){
       this.impact();
       this.active=false;
     }
   }
-
   draw() {
     if(!this.active) return;
-
-    // Draw trail particles
     for(let t of this.trailParticles) t.draw();
-
-    // Draw comet core
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
     ctx.fillStyle=`hsla(${this.colorHue},100%,70%,1)`;
@@ -198,7 +194,6 @@ class Comet {
     ctx.fill();
     ctx.shadowBlur=0;
   }
-
   impact() {
     for(let p of particles){
       let dx=p.x-this.x, dy=p.y-this.y;
@@ -215,12 +210,9 @@ class Comet {
 }
 
 let comets=[];
-function spawnComet(){
-  comets.push(new Comet());
-  let nextTime=2000+Math.random()*4000;
-  setTimeout(spawnComet,nextTime);
+function spawnComet(x,y){
+  comets.push(new Comet(x,y));
 }
-spawnComet();
 
 // --- Animation loop ---
 function animate() {
@@ -230,29 +222,49 @@ function animate() {
 
   for(let i=0;i<particles.length;i++){
     let p1=particles[i]; p1.update(); p1.draw();
-    for(let j=i+1;j<particles.length;j++){
-      let p2=particles[j];
-      let dx=p1.x-p2.x, dy=p1.y-p2.y;
-      let dist=dx*dx+dy*dy;
-      if(dist<80*80){
-        ctx.beginPath();
-        ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y);
-        ctx.strokeStyle=`hsla(${p1.colorHue+hueShift},80%,60%,0.05)`;
-        ctx.lineWidth=0.5; ctx.stroke();
+    if(initialFrames <= 0){ // skip heavy line drawing initially
+      for(let j=i+1;j<particles.length;j++){
+        let p2=particles[j];
+        let dx=p1.x-p2.x, dy=p1.y-p2.y;
+        let dist=dx*dx+dy*dy;
+        if(dist<80*80){
+          ctx.beginPath();
+          ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y);
+          ctx.strokeStyle=`hsla(${p1.colorHue+hueShift},80%,60%,0.05)`;
+          ctx.lineWidth=0.5; ctx.stroke();
+        }
       }
+    }
+  }
+
+  if(mouse.isDown){
+    let now = Date.now();
+    if(now - lastCometTime > 100){
+      spawnComet(mouse.x, mouse.y);
+      lastCometTime = now;
     }
   }
 
   for(let c of comets){ c.update(); c.draw(); }
   for(let f of flashes){ f.update(); f.draw(); }
 
+  if(initialFrames>0) initialFrames--; // count down initial frames
   requestAnimationFrame(animate);
 }
 animate();
 
 // Mouse events
 canvas.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
-canvas.addEventListener('mousedown',()=>{mouse.isDown=true;});
+canvas.addEventListener('mousedown',e=>{
+  if(e.button===0){
+    mouse.isDown=true;
+    let now = Date.now();
+    if(now - lastCometTime > 500){
+      spawnComet(e.clientX, e.clientY);
+      lastCometTime = now;
+    }
+  }
+});
 canvas.addEventListener('mouseup',()=>{mouse.isDown=false;});
 
 window.addEventListener('resize',()=>{
