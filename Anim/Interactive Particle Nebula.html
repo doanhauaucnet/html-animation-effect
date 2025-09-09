@@ -10,7 +10,6 @@
             margin: 0;
             overflow: hidden;
             background-color: #000005;
-            cursor: none;
             font-family: 'Inter', sans-serif;
         }
 
@@ -22,24 +21,11 @@
             z-index: -1;
         }
 
-        .cursor-dot {
-            width: 8px;
-            height: 8px;
-            background-color: rgba(0, 255, 255, 0.8);
-            border-radius: 50%;
-            position: fixed;
-            pointer-events: none;
-            transform: translate(-50%, -50%);
-            z-index: 10000;
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.7), 0 0 25px rgba(0, 255, 255, 0.5);
-            transition: transform 0.1s ease-out, background-color 0.2s ease, box-shadow 0.2s ease;
-        }
     </style>
 </head>
 
 <body>
     <canvas id="webgl-canvas"></canvas>
-    <div class="cursor-dot"></div>
 
     <script type="importmap">
 {
@@ -60,15 +46,17 @@
         const PARTICLE_COUNT = 50000;
         const velocities = new Float32Array(PARTICLE_COUNT * 3);
 
-        let clickEffect = { position: new THREE.Vector2(), strength: 0, maxStrength: 1.2, decay: 0.96 };
+        let clickEffect = { position: new THREE.Vector2(), strength: 0, maxStrength: 0.5, decay: 0.96 };
 
+        // --- Blue/White Moody Nebula Palette ---
         const themes = [
-            [0.0, 0.1, 0.2],    // Reds
-            [0.3, 0.4, 0.5],    // Greens
-            [0.55, 0.65, 0.75], // Blues
-            [0.8, 0.9, 1.0],    // Purples
-            [0.1, 0.25, 0.35]   // Oranges
+            [0.55, 0.60, 0.65], // deep blue
+            [0.58, 0.70, 0.75], // lighter blue
+            [0.6, 0.65, 0.7],   // cyan-blue
+            [0.62, 0.72, 0.82], // bluish-white
+            [0.0, 0.0, 0.0]     // pure white
         ];
+
         let currentThemeIndex = -1;
         const targetHues = new Float32Array(PARTICLE_COUNT);
 
@@ -118,7 +106,7 @@
                 originalPositions[i * 3] = x; originalPositions[i * 3 + 1] = y; originalPositions[i * 3 + 2] = z;
 
                 const hue = initialTheme[i % initialTheme.length];
-                color.setHSL(hue, 0.7, 0.5);
+                color.setHSL(hue, 0.6, 0.55);
                 colors[i * 3] = color.r; colors[i * 3 + 1] = color.g; colors[i * 3 + 2] = color.b;
                 targetHues[i] = hue;
                 velocities[i * 3] = velocities[i * 3 + 1] = velocities[i * 3 + 2] = 0;
@@ -128,7 +116,7 @@
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
             geometry.setAttribute('originalPosition', new THREE.BufferAttribute(originalPositions, 3));
 
-            const material = new THREE.PointsMaterial({ size: 0.005, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8, depthWrite: false });
+            const material = new THREE.PointsMaterial({ size: 0.005, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.85, depthWrite: false });
             particles = new THREE.Points(geometry, material);
             scene.add(particles);
 
@@ -154,14 +142,17 @@
         }
 
         function onMouseDown(event) {
-            clickEffect.position.x = (event.clientX / window.innerWidth) * 2 - 1;
-            clickEffect.position.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            clickEffect.strength = clickEffect.maxStrength;
+            // Left click = ripple
+            if (event.button === 0) {
+                clickEffect.position.x = (event.clientX / window.innerWidth) * 2 - 1;
+                clickEffect.position.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                clickEffect.strength = clickEffect.maxStrength;
+            }
         }
 
         function onRightClick(event) {
             event.preventDefault();
-
+            // Right click = change nebula color
             let nextThemeIndex;
             do { nextThemeIndex = Math.floor(Math.random() * themes.length); } 
             while (nextThemeIndex === currentThemeIndex);
@@ -180,7 +171,6 @@
             const colors = particles.geometry.attributes.color.array;
             const originalPositions = particles.geometry.attributes.originalPosition.array;
 
-            // --- Riptide left-click effect ---
             if (clickEffect.strength > 0) clickEffect.strength *= clickEffect.decay;
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 const ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
@@ -211,7 +201,7 @@
                 // Smooth color transition
                 const color = new THREE.Color();
                 const currentColor = new THREE.Color(colors[ix], colors[iy], colors[iz]);
-                color.setHSL(targetHues[i], 0.7, 0.5);
+                color.setHSL(targetHues[i], 0.6, 0.55);
                 currentColor.lerp(color, 0.02);
                 colors[ix] = currentColor.r;
                 colors[iy] = currentColor.g;
@@ -225,12 +215,6 @@
             camera.lookAt(scene.position);
             composer.render();
         }
-
-        const cursorDot = document.querySelector('.cursor-dot');
-        document.addEventListener('mousemove', e => {
-            cursorDot.style.left = `${e.clientX}px`;
-            cursorDot.style.top = `${e.clientY}px`;
-        });
 
         init();
         animate();
