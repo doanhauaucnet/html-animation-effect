@@ -12,6 +12,7 @@
             overflow: hidden;
             background-color: #0d1b2a;
         }
+
         #particles-js {
             position: absolute;
             width: 100%;
@@ -20,117 +21,63 @@
             left: 0;
             z-index: -1;
         }
+
+        .particle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #fff;
+            border-radius: 50%;
+            opacity: 0.5;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <div id="particles-js"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/particles.js"></script>
     <script>
-        particlesJS('particles-js', {
-            particles: {
-                number: {
-                    value: 80,
-                    density: {
-                        enable: true,
-                        value_area: 800
-                    }
-                },
-                color: {
-                    value: '#ffffff'
-                },
-                shape: {
-                    type: 'circle',
-                    stroke: {
-                        width: 0,
-                        color: '#000000'
-                    },
-                    polygon: {
-                        nb_sides: 5
-                    }
-                },
-                opacity: {
-                    value: 0.5,
-                    random: false,
-                    anim: {
-                        enable: false,
-                        speed: 1,
-                        opacity_min: 0.1,
-                        sync: false
-                    }
-                },
-                size: {
-                    value: 3,
-                    random: true,
-                    anim: {
-                        enable: false,
-                        speed: 40,
-                        size_min: 0.1,
-                        sync: false
-                    }
-                },
-                line_linked: {
-                    enable: true,
-                    distance: 150,
-                    color: '#ffffff',
-                    opacity: 0.4,
-                    width: 1
-                },
-                move: {
-                    enable: true,
-                    speed: 6,
-                    direction: 'none',
-                    random: false,
-                    straight: false,
-                    out_mode: 'out',
-                    bounce: false,
-                    attract: {
-                        enable: false,
-                        rotateX: 600,
-                        rotateY: 1200
-                    }
-                }
-            },
-            interactivity: {
-                detect_on: 'canvas',
-                events: {
-                    onhover: {
-                        enable: true,
-                        mode: 'repulse'
-                    },
-                    onclick: {
-                        enable: true,
-                        mode: 'push'
-                    },
-                    resize: true
-                },
-                modes: {
-                    grab: {
-                        distance: 400,
-                        line_linked: {
-                            opacity: 1
-                        }
-                    },
-                    bubble: {
-                        distance: 400,
-                        size: 40,
-                        duration: 2,
-                        opacity: 8,
-                        speed: 3
-                    },
-                    repulse: {
-                        distance: 100,
-                        duration: 0.4
-                    },
-                    push: {
-                        particles_nb: 4
-                    },
-                    remove: {
-                        particles_nb: 2
-                    }
-                }
-            },
-            retina_detect: true
+        document.addEventListener("DOMContentLoaded", function () {
+            const container = document.getElementById("particles-js");
+            const particleCount = 100;
+            const particles = [];
+
+            // Create particles
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement("div");
+                particle.classList.add("particle");
+                container.appendChild(particle);
+                particles.push({
+                    element: particle,
+                    x: Math.random() * window.innerWidth,
+                    y: Math.random() * window.innerHeight,
+                    size: Math.random() * 5 + 2,
+                    speedX: Math.random() * 0.5 - 0.25,
+                    speedY: Math.random() * 0.5 - 0.25,
+                    opacity: Math.random() * 0.5 + 0.5
+                });
+            }
+
+            // Update particle positions
+            function updateParticles() {
+                particles.forEach(p => {
+                    p.x += p.speedX;
+                    p.y += p.speedY;
+
+                    if (p.x < 0 || p.x > window.innerWidth) p.speedX *= -1;
+                    if (p.y < 0 || p.y > window.innerHeight) p.speedY *= -1;
+
+                    p.element.style.left = `${p.x}px`;
+                    p.element.style.top = `${p.y}px`;
+                    p.element.style.width = `${p.size}px`;
+                    p.element.style.height = `${p.size}px`;
+                    p.element.style.opacity = p.opacity;
+                });
+
+                requestAnimationFrame(updateParticles);
+            }
+
+            updateParticles();
         });
     </script>
 </body>
