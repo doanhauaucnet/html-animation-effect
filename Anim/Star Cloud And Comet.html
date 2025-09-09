@@ -260,7 +260,7 @@ canvas.addEventListener('mousedown',e=>{
   if(e.button===0){
     mouse.isDown=true;
     let now = Date.now();
-    if(now - lastCometTime > 500){
+    if(now - lastCometTime > 100){
       spawnComet(e.clientX, e.clientY);
       lastCometTime = now;
     }
