@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Orb Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Inter', sans-serif;
+            color: white;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="simulationCanvas"></canvas>
+
+    <script>
+        // --- Setup ---
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        // --- Configuration ---
+        const ORB_COUNT = 50;
+        const COLORS = {
+            PURPLE: 'magenta',
+            BLUE: 'cyan',
+            WHITE: 'white'
+        };
+        const COLOR_PALETTE = {
+            [COLORS.PURPLE]: { main: '#ff00ff', glow: '#ff00ff' },
+            [COLORS.BLUE]: { main: '#00ffff', glow: '#00ffff' },
+            [COLORS.WHITE]: { main: '#ffffff', glow: '#ffffff' }
+        };
+        const MAX_SPEED = 4;
+        const MIN_SPEED = 0.1;
+        const MOUSE_REPEL_RADIUS = 150;
+        const MOUSE_REPEL_STRENGTH = 1;
+        const DRAG_REPEL_STRENGTH = 0.5;
+
+        // --- State ---
+        let orbs = [];
+        let shockwaves = [];
+        let particles = [];
+        let mouse = { x: width / 2, y: height / 2, isDown: false };
+        let draggedOrb = null;
+        let frameCount = 0;
+
+        // --- Background Glow ---
+        const backgroundGlow = {
+            x: width * Math.random(),
+            y: height * Math.random(),
+            radius: Math.min(width, height) * 0.7,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: (Math.random() - 0.5) * 0.5
+        };
+
+        function updateBackgroundGlow() {
+            backgroundGlow.x += backgroundGlow.vx;
+            backgroundGlow.y += backgroundGlow.vy;
+            if (backgroundGlow.x - backgroundGlow.radius < 0 || backgroundGlow.x + backgroundGlow.radius > width) {
+                backgroundGlow.vx *= -1;
+            }
+            if (backgroundGlow.y - backgroundGlow.radius < 0 || backgroundGlow.y + backgroundGlow.radius > height) {
+                backgroundGlow.vy *= -1;
+            }
+        }
+        
+        function drawBackground() {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#020011';
+            ctx.fillRect(0, 0, width, height);
+
+            const gradient = ctx.createRadialGradient(
+                backgroundGlow.x, backgroundGlow.y, 0,
+                backgroundGlow.x, backgroundGlow.y, backgroundGlow.radius
+            );
+            gradient.addColorStop(0, 'rgba(15, 10, 40, 0.7)');
+            gradient.addColorStop(1, 'rgba(2, 0, 17, 0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        // --- Utility Functions ---
+        function random(min, max) { return Math.random() * (max - min) + min; }
+        function distance(x1, y1, x2, y2) { return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2); }
+
+        // --- Orb Class ---
+        class Orb {
+            constructor(x, y, radius, color) {
+                this.x = x;
+                this.y = y;
+                this.oldX = x - random(-1, 1);
+                this.oldY = y - random(-1, 1);
+                this.radius = radius;
+                this.baseRadius = radius;
+                this.mass = radius * radius * 0.1;
+                this.color = color;
+                this.ax = 0;
+                this.ay = 0;
+                
+                // For bubble deformation
+                this.points = [];
+                this.numPoints = 32;
+                for (let i = 0; i < this.numPoints; i++) {
+                    this.points.push({
+                        angle: (Math.PI * 2 / this.numPoints) * i,
+                        r: this.radius * 1.2, // Outer bubble radius
+                        vr: 0 // radial velocity for spring effect
+                    });
+                }
+
+                this.state = 'idle';
+                this.stateCounter = 0;
+                this.maxStateCounter = 0;
+                this.pulseTargetRadius = 0;
+                this.alpha = 1;
+                this.target = null;
+                this.isTargeted = false;
+            }
+
+            applyForce(fx, fy) {
+                this.ax += fx / this.mass;
+                this.ay += fy / this.mass;
+            }
+
+            update(dt) {
+                this.handleState();
+
+                let vx = this.x - this.oldX;
+                let vy = this.y - this.oldY;
+                
+                const speed = Math.sqrt(vx * vx + vy * vy);
+                if (speed > MAX_SPEED) {
+                    vx = (vx / speed) * MAX_SPEED;
+                    vy = (vy / speed) * MAX_SPEED;
+                }
+                if (speed > 0 && speed < MIN_SPEED) {
+                    vx = (vx / speed) * MIN_SPEED;
+                    vy = (vy / speed) * MIN_SPEED;
+                }
+
+                this.oldX = this.x;
+                this.oldY = this.y;
+                this.x += vx + this.ax * dt * dt;
+                this.y += vy + this.ay * dt * dt;
+
+                this.ax = 0;
+                this.ay = 0;
+                
+                // Update bubble deformation points
+                const k = 0.08; // spring stiffness
+                const damping = 0.95; // damping factor
+                const bubbleBaseRadius = this.radius * 1.2;
+                this.points.forEach(p => {
+                    const displacement = p.r - bubbleBaseRadius;
+                    const springForce = -k * displacement;
+                    p.vr += springForce;
+                    p.vr *= damping;
+                    p.r += p.vr;
+                });
+            }
+            
+            handleState() {
+                if (this.state === 'idle') return;
+                this.stateCounter++;
+                switch(this.state) {
+                    case 'pulsing_shrink':
+                        this.radius = this.baseRadius * (1 - this.stateCounter / this.maxStateCounter);
+                        if (this.stateCounter >= this.maxStateCounter) {
+                            this.state = 'pulsing_expand';
+                            this.stateCounter = 0;
+                            this.maxStateCounter = 60;
+                            this.pulseTargetRadius = this.baseRadius * random(3, 5);
+                        }
+                        break;
+                    case 'pulsing_expand':
+                        this.radius = this.lerp(this.radius, this.pulseTargetRadius, 0.1);
+                        if (this.stateCounter >= this.maxStateCounter) {
+                            this.state = 'pulsing_return';
+                            this.stateCounter = 0;
+                            this.maxStateCounter = 90;
+                        }
+                        break;
+                     case 'pulsing_return':
+                        this.radius = this.lerp(this.radius, this.baseRadius, 0.08);
+                        if (Math.abs(this.radius - this.baseRadius) < 0.5) {
+                            this.radius = this.baseRadius;
+                            this.state = 'idle';
+                        }
+                        break;
+                    case 'fading_out':
+                        this.alpha = 1 - (this.stateCounter / this.maxStateCounter);
+                        this.radius = this.baseRadius * this.alpha;
+                        if(this.stateCounter >= this.maxStateCounter){ this.toRemove = true; }
+                        break;
+                    case 'fading_in':
+                        this.alpha = this.stateCounter / this.maxStateCounter;
+                        this.radius = this.baseRadius * this.alpha;
+                        if(this.stateCounter >= this.maxStateCounter){
+                           this.state = 'idle';
+                           this.alpha = 1;
+                           this.radius = this.baseRadius;
+                        }
+                        break;
+                     case 'color_shifting':
+                        if (this.stateCounter > this.maxStateCounter) { this.state = 'idle'; }
+                        break;
+                    case 'seeking_merge':
+                        if (!this.target || this.target.toRemove || !orbs.includes(this.target)) {
+                            this.state = 'idle';
+                            if(this.target) this.target.isTargeted = false;
+                            this.target = null;
+                            return;
+                        }
+                        const dx = this.target.x - this.x;
+                        const dy = this.target.y - this.y;
+                        const d = Math.sqrt(dx*dx + dy*dy);
+
+                        if (d < (this.radius + this.target.radius)) {
+                            mergeOrbs(this, this.target);
+                        } else {
+                            // Calculate velocity for this frame
+                            const vx = this.x - this.oldX;
+                            const vy = this.y - this.oldY;
+
+                            // Calculate target velocity (direct path)
+                            let targetVx = dx * 0.1;
+                            let targetVy = dy * 0.1;
+
+                            // Add swirl when close
+                            if (d < (this.radius + this.target.radius) * 4) {
+                                const swirlStrength = 1.5;
+                                targetVx += -dy / d * swirlStrength;
+                                targetVy += dx / d * swirlStrength;
+                            }
+                            
+                            // Interpolate current velocity towards target velocity
+                            const newVx = this.lerp(vx, targetVx, 0.2);
+                            const newVy = this.lerp(vy, targetVy, 0.2);
+                            
+                            this.oldX = this.x - newVx;
+                            this.oldY = this.y - newVy;
+
+                            if (frameCount % 3 === 0) {
+                                createTrailParticle(this);
+                            }
+                        }
+                        break;
+                }
+            }
+            
+            lerp(start, end, amt) { return (1-amt)*start+amt*end; }
+
+            draw() {
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.globalAlpha = this.alpha;
+                ctx.translate(this.x, this.y);
+                const palette = COLOR_PALETTE[this.color];
+                
+                // Layer 3: The Deformable Bubble
+                ctx.beginPath();
+                const p0 = this.points[this.numPoints - 1];
+                const p1 = this.points[0];
+                const startX = p0.r * Math.cos(p0.angle);
+                const startY = p0.r * Math.sin(p0.angle);
+                const midX = (startX + p1.r * Math.cos(p1.angle)) / 2;
+                const midY = (startY + p1.r * Math.sin(p1.angle)) / 2;
+                ctx.moveTo(midX, midY);
+
+                for (let i = 0; i < this.numPoints; i++) {
+                    const p_current = this.points[i];
+                    const p_next = this.points[(i + 1) % this.numPoints];
+                    const mid_next_x = (p_current.r * Math.cos(p_current.angle) + p_next.r * Math.cos(p_next.angle)) / 2;
+                    const mid_next_y = (p_current.r * Math.sin(p_current.angle) + p_next.r * Math.sin(p_next.angle)) / 2;
+                    ctx.quadraticCurveTo(p_current.r * Math.cos(p_current.angle), p_current.r * Math.sin(p_current.angle), mid_next_x, mid_next_y);
+                }
+                ctx.closePath();
+                
+                const bubbleGradient = ctx.createRadialGradient(0, 0, this.radius * 0.8, 0, 0, this.radius * 1.2);
+                bubbleGradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+                bubbleGradient.addColorStop(0.8, `${palette.glow}33`);
+                bubbleGradient.addColorStop(1, `${palette.glow}88`);
+                ctx.strokeStyle = bubbleGradient;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Layer 1: The Core
+                const coreGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius);
+                coreGradient.addColorStop(0, `${palette.main}ff`);
+                coreGradient.addColorStop(0.3, `${palette.main}cc`);
+                coreGradient.addColorStop(1, `${palette.main}00`);
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = coreGradient;
+                ctx.fill();
+                
+                if (this.state === 'color_shifting') {
+                    const progress = this.stateCounter / this.maxStateCounter;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius * (1 + Math.sin(progress * Math.PI) * 0.5), 0, Math.PI * 2);
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            constrain() {
+                const vx = this.x - this.oldX;
+                const vy = this.y - this.oldY;
+                const bounceFactor = 0.95;
+                const bubbleRadius = this.radius * 1.2;
+
+                if (this.x - bubbleRadius < 0) {
+                    this.x = bubbleRadius;
+                    this.oldX = this.x + vx * bounceFactor;
+                    this.deformAt(Math.PI, Math.abs(vx) * 1.5);
+                } else if (this.x + bubbleRadius > width) {
+                    this.x = width - bubbleRadius;
+                    this.oldX = this.x + vx * bounceFactor;
+                    this.deformAt(0, Math.abs(vx) * 1.5);
+                }
+                if (this.y - bubbleRadius < 0) {
+                    this.y = bubbleRadius;
+                    this.oldY = this.y + vy * bounceFactor;
+                    this.deformAt(Math.PI * 1.5, Math.abs(vy) * 1.5);
+                } else if (this.y + bubbleRadius > height) {
+                    this.y = height - bubbleRadius;
+                    this.oldY = this.y + vy * bounceFactor;
+                    this.deformAt(Math.PI * 0.5, Math.abs(vy) * 1.5);
+                }
+            }
+
+            deformAt(angle, force) {
+                for (let i = 0; i < this.numPoints; i++) {
+                    const p = this.points[i];
+                    let angleDiff = Math.abs(p.angle - angle);
+                    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                    const influence = Math.max(0, 1 - angleDiff / (Math.PI / 1.5));
+                    p.vr -= force * influence;
+                }
+            }
+
+            explode() {
+                const count = Math.floor(random(2, 6));
+                for (let i = 0; i < count; i++) {
+                    const newRadius = this.radius * random(0.3, 0.6);
+                    const angle = random(0, Math.PI * 2);
+                    const speed = random(3, 6);
+                    const newOrb = new Orb(this.x, this.y, newRadius, Object.values(COLORS)[Math.floor(random(0, 3))]);
+                    newOrb.oldX = newOrb.x - Math.cos(angle) * speed;
+                    newOrb.oldY = newOrb.y - Math.sin(angle) * speed;
+                    newOrb.state = 'fading_in';
+                    newOrb.stateCounter = 0;
+                    newOrb.maxStateCounter = 30;
+                    orbs.push(newOrb);
+                }
+                 createParticles(this.x, this.y, this.color, 30);
+                this.toRemove = true;
+            }
+
+            pulse() {
+                if(this.state !== 'idle') return;
+                this.state = 'pulsing_shrink';
+                this.stateCounter = 0;
+                this.maxStateCounter = 15;
+            }
+        }
+        
+        // --- Shockwave Class ---
+        class Shockwave {
+            constructor(x, y){
+                this.x = x; this.y = y; this.radius = 0;
+                this.speed = 10; this.strength = 1.5; this.life = 1; this.hasBounced = false;
+            }
+            update(){
+                this.radius += this.speed; this.life -= 0.015;
+                if(!this.hasBounced && (this.x - this.radius < 0 || this.x + this.radius > width || this.y - this.radius < 0 || this.y + this.radius > height)){
+                    this.hasBounced = true;
+                     const rebound = new Shockwave(this.x, this.y);
+                     rebound.radius = this.radius; rebound.speed = -this.speed * 0.5;
+                     rebound.strength = -this.strength * 0.5; rebound.life = this.life * 0.8;
+                     shockwaves.push(rebound);
+                }
+                if(this.life <= 0){ this.toRemove = true; }
+            }
+            draw(){
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${this.life * 0.5})`;
+                ctx.lineWidth = Math.max(1, 15 * this.life); ctx.stroke();
+                ctx.restore();
+            }
+        }
+        
+        // --- Particle Class ---
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y;
+                const angle = random(0, Math.PI * 2); const speed = random(1, 5);
+                this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+                this.life = 1; this.color = COLOR_PALETTE[color].main;
+            }
+            update() {
+                this.x += this.vx; this.y += this.vy; this.vy += 0.05; this.life -= 0.02;
+                if (this.life <= 0) this.toRemove = true;
+            }
+            draw() {
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.fillStyle = this.color; ctx.globalAlpha = this.life;
+                ctx.fillRect(this.x, this.y, 2, 2);
+                ctx.restore();
+            }
+        }
+        
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) { particles.push(new Particle(x, y, color)); }
+        }
+
+        function createTrailParticle(orb) {
+             const trailParticle = new Particle(orb.x, orb.y, orb.color);
+             const vx = orb.x - orb.oldX;
+             const vy = orb.y - orb.oldY;
+             trailParticle.vx = -vx * 0.2 + random(-0.2, 0.2);
+             trailParticle.vy = -vy * 0.2 + random(-0.2, 0.2);
+             trailParticle.life = 0.5; // shorter life for trail
+             particles.push(trailParticle);
+        }
+
+        // --- Main Simulation Logic ---
+        function handleCollisions() {
+            for (let i = 0; i < orbs.length; i++) {
+                for (let j = i + 1; j < orbs.length; j++) {
+                    const orb1 = orbs[i];
+                    const orb2 = orbs[j];
+                    
+                    // Skip collision between a seeking orb and its target
+                    if ((orb1.state === 'seeking_merge' && orb1.target === orb2) ||
+                        (orb2.state === 'seeking_merge' && orb2.target === orb1)) {
+                        continue;
+                    }
+
+                    const totalRadius = orb1.radius * 1.2 + orb2.radius * 1.2;
+                    const d = distance(orb1.x, orb1.y, orb2.x, orb2.y);
+
+                    if (d < totalRadius) {
+                        const overlap = totalRadius - d;
+                        const dx = orb2.x - orb1.x;
+                        const dy = orb2.y - orb1.y;
+                        const angle = Math.atan2(dy, dx);
+
+                        const moveX = (overlap / 2) * Math.cos(angle);
+                        const moveY = (overlap / 2) * Math.sin(angle);
+
+                        orb1.x -= moveX; orb1.y -= moveY;
+                        orb2.x += moveX; orb2.y += moveY;
+                        
+                        // Verlet collision response
+                        const v1x = orb1.x - orb1.oldX; const v1y = orb1.y - orb1.oldY;
+                        const v2x = orb2.x - orb2.oldX; const v2y = orb2.y - orb2.oldY;
+                        const p = (v1x * dx + v1y * dy - v2x * dx - v2y * dy) / (d*d);
+                        
+                        orb1.oldX = orb1.x - (v1x - p * dx);
+                        orb1.oldY = orb1.y - (v1y - p * dy);
+                        orb2.oldX = orb2.x - (v2x + p * dx);
+                        orb2.oldY = orb2.y - (v2y + p * dy);
+                        
+                        const impactMagnitude = Math.abs(p) * (orb1.mass + orb2.mass) * 0.05;
+                        orb1.deformAt(angle + Math.PI, impactMagnitude);
+                        orb2.deformAt(angle, impactMagnitude);
+                    }
+                }
+            }
+        }
+
+        function handleMouseInteraction() {
+            if (draggedOrb) {
+                // An orb is being dragged
+                // 1. Attract the dragged orb
+                const attractionStrength = 1.5;
+                const dx = mouse.x - draggedOrb.x;
+                const dy = mouse.y - draggedOrb.y;
+                draggedOrb.applyForce(dx * attractionStrength, dy * attractionStrength);
+
+                const damping = 0.8;
+                const vx = (draggedOrb.x - draggedOrb.oldX) * damping;
+                const vy = (draggedOrb.y - draggedOrb.oldY) * damping;
+                draggedOrb.oldX = draggedOrb.x - vx;
+                draggedOrb.oldY = draggedOrb.y - vy;
+
+                // 2. Repel all other orbs
+                for (const orb of orbs) {
+                    if (orb === draggedOrb) continue;
+                    const d = distance(mouse.x, mouse.y, orb.x, orb.y);
+                    if (d < MOUSE_REPEL_RADIUS * 2) {
+                        const angle = Math.atan2(orb.y - mouse.y, orb.x - mouse.x);
+                        const force = (1 - d / (MOUSE_REPEL_RADIUS * 2)) * DRAG_REPEL_STRENGTH;
+                        orb.applyForce(Math.cos(angle) * force, Math.sin(angle) * force);
+                    }
+                }
+            } else {
+                // No orb is being dragged - default hover behavior
+                for (const orb of orbs) {
+                    const d = distance(mouse.x, mouse.y, orb.x, orb.y);
+                    if (d < MOUSE_REPEL_RADIUS) {
+                        const angle = Math.atan2(orb.y - mouse.y, orb.x - mouse.x);
+                        const force = (1 - d / MOUSE_REPEL_RADIUS) * MOUSE_REPEL_STRENGTH;
+                        orb.applyForce(Math.cos(angle) * force, Math.sin(angle) * force);
+                    }
+                }
+            }
+        }
+
+        function handleOrbAbilities() {
+            orbs.forEach(orb => {
+                 if (orb.state === 'pulsing_expand') {
+                    orbs.forEach(other => {
+                        if (orb === other) return;
+                        const d = distance(orb.x, orb.y, other.x, other.y);
+                        if (d < orb.radius) {
+                             const angle = Math.atan2(other.y - orb.y, other.x - orb.x);
+                             const force = (1 - d / orb.radius) * 1;
+                             other.applyForce(Math.cos(angle) * force, Math.sin(angle) * force);
+                        }
+                    });
+                } else if (orb.state === 'pulsing_return') {
+                     orbs.forEach(other => {
+                        if (orb === other) return;
+                        const d = distance(orb.x, orb.y, other.x, other.y);
+                        if (d < orb.baseRadius * 4) {
+                             const angle = Math.atan2(other.y - orb.y, other.x - orb.x);
+                             const force = (1 - d / (orb.baseRadius * 4)) * -0.2;
+                             other.applyForce(Math.cos(angle) * force, Math.sin(angle) * force);
+                        }
+                    });
+                }
+            });
+        }
+        
+        function handleShockwaves() {
+            shockwaves.forEach(sw => {
+                orbs.forEach(orb => {
+                    const d = distance(sw.x, sw.y, orb.x, orb.y);
+                    const bandwidth = 15 * sw.life;
+                    if(d > sw.radius - bandwidth && d < sw.radius + bandwidth){
+                        const angle = Math.atan2(orb.y - sw.y, orb.x - sw.x);
+                        const force = sw.strength * sw.life;
+                        orb.applyForce(Math.cos(angle) * force, Math.sin(angle) * force);
+                    }
+                });
+            });
+        }
+        
+        function balancePopulation() {
+            const BIG_ORB_RADIUS_THRESHOLD = 60;
+            let largestOrb = null;
+            let maxRadius = 0;
+
+            orbs.forEach(orb => {
+                if (orb.radius > maxRadius && orb.state === 'idle') {
+                    maxRadius = orb.radius;
+                    largestOrb = orb;
+                }
+            });
+
+            if (largestOrb && maxRadius > BIG_ORB_RADIUS_THRESHOLD) {
+                splitOrb(largestOrb);
+                return; 
+            }
+
+            if (orbs.length < ORB_COUNT - 5) { spawnOrb(); return; }
+            if (orbs.length > ORB_COUNT + 5) { despawnOrb(); return; }
+
+            const counts = { [COLORS.WHITE]: 0, [COLORS.BLUE]: 0, [COLORS.PURPLE]: 0 };
+            orbs.forEach(orb => { if (orb.state === 'idle') counts[orb.color]++; });
+            const total = counts[COLORS.WHITE] + counts[COLORS.BLUE] + counts[COLORS.PURPLE];
+            if (total === 0) return;
+
+            const target = total / 3;
+            let maxColor = null, minColor = null; let maxCount = -1, minCount = Infinity;
+            for (const color in counts) {
+                if (counts[color] > maxCount) { maxCount = counts[color]; maxColor = color; }
+                if (counts[color] < minCount) { minCount = counts[color]; minColor = color; }
+            }
+
+            if (maxCount > target + 2 && minCount < target - 2) {
+                 const orbToChange = orbs.find(orb => orb.color === maxColor && orb.state === 'idle');
+                 if (orbToChange) {
+                     orbToChange.state = 'color_shifting'; orbToChange.stateCounter = 0;
+                     orbToChange.maxStateCounter = 60;
+                     setTimeout(() => { orbToChange.color = minColor; }, 500);
+                 }
+            } 
+            else if (counts[COLORS.BLUE] > target + 3) {
+                 let blueOrbs = orbs.filter(o => o.color === COLORS.BLUE && o.state === 'idle');
+                 if (blueOrbs.length < 2) return;
+
+                 blueOrbs.sort((a, b) => a.radius - b.radius);
+
+                 for(let i=0; i<blueOrbs.length; i++) {
+                     for(let j=i+1; j<blueOrbs.length; j++) {
+                         const o1 = blueOrbs[i];
+                         const o2 = blueOrbs[j];
+                         if(distance(o1.x, o1.y, o2.x, o2.y) < (o1.radius + o2.radius) * 4) {
+                             mergeOrbs(o1, o2);
+                             return;
+                         }
+                     }
+                 }
+            }
+        }
+
+        function spawnOrb() {
+            const r = random(10, 25);
+            const x = random(r, width - r); const y = random(r, height - r);
+            const color = Object.values(COLORS)[Math.floor(random(0, 3))];
+            const newOrb = new Orb(x, y, r, color);
+            newOrb.state = 'fading_in'; newOrb.stateCounter = 0;
+            newOrb.maxStateCounter = 60;
+            orbs.push(newOrb);
+        }
+
+        function despawnOrb() {
+            const orbToDespawn = orbs.find(o => o.state === 'idle');
+            if (orbToDespawn) {
+                orbToDespawn.state = 'fading_out'; orbToDespawn.stateCounter = 0;
+                orbToDespawn.maxStateCounter = 60;
+            }
+        }
+        
+        function splitOrb(orb) {
+            orb.toRemove = true;
+            createParticles(orb.x, orb.y, orb.color, 20);
+
+            const newRadius = orb.baseRadius / Math.sqrt(2);
+            const angle = random(0, Math.PI * 2);
+            const speed = 2;
+
+            for (let i = 0; i < 2; i++) {
+                const currentAngle = angle + i * Math.PI; // Opposite directions
+                const newOrb = new Orb(
+                    orb.x,
+                    orb.y,
+                    newRadius,
+                    Object.values(COLORS)[Math.floor(random(0, 3))]
+                );
+                newOrb.oldX = newOrb.x - Math.cos(currentAngle) * speed;
+                newOrb.oldY = newOrb.y - Math.sin(currentAngle) * speed;
+                newOrb.state = 'fading_in';
+                newOrb.stateCounter = 0;
+                newOrb.maxStateCounter = 30;
+                orbs.push(newOrb);
+            }
+        }
+
+        function mergeOrbs(orb1, orb2){
+            if(orb1.target) orb1.target.isTargeted = false;
+            if(orb2.target) orb2.target.isTargeted = false;
+
+            const newRadius = Math.sqrt(orb1.radius**2 + orb2.radius**2);
+            const newOrb = new Orb((orb1.x + orb2.x) / 2, (orb1.y + orb2.y) / 2, newRadius, Math.random() > 0.5 ? orb1.color : orb2.color);
+            const v1x = orb1.x - orb1.oldX, v1y = orb1.y - orb1.oldY;
+            const v2x = orb2.x - orb2.oldX, v2y = orb2.y - orb2.oldY;
+            const combinedVx = (v1x * orb1.mass + v2x * orb2.mass) / (orb1.mass + orb2.mass);
+            const combinedVy = (v1y * orb1.mass + v2y * orb2.mass) / (orb1.mass + orb2.mass);
+            newOrb.oldX = newOrb.x - combinedVx; newOrb.oldY = newOrb.y - combinedVy;
+            newOrb.state = 'fading_in'; newOrb.stateCounter = 0; newOrb.maxStateCounter = 45;
+            orbs.push(newOrb);
+            createParticles((orb1.x + orb2.x)/2, (orb1.y + orb2.y)/2, newOrb.color, 40);
+            orb1.toRemove = true; orb2.toRemove = true;
+        }
+
+        function animate() {
+            const dt = 1; 
+            updateBackgroundGlow();
+            drawBackground();
+
+            shockwaves.forEach(sw => { sw.update(); sw.draw(); });
+            particles.forEach(p => { p.update(); p.draw(); });
+            handleShockwaves();
+            handleMouseInteraction();
+            handleOrbAbilities();
+            
+            orbs.forEach(orb => { orb.update(dt); orb.constrain(); orb.draw(); });
+            handleCollisions();
+            
+            orbs = orbs.filter(o => !o.toRemove);
+            shockwaves = shockwaves.filter(sw => !sw.toRemove);
+            particles = particles.filter(p => !p.toRemove);
+
+            frameCount++;
+            if (frameCount % 180 === 0) { balancePopulation(); }
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            backgroundGlow.radius = Math.min(width, height) * 0.7;
+        });
+        canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+        canvas.addEventListener('mousedown', e => {
+            if (e.button !== 0) return; // Only react to left-click
+            mouse.isDown = true;
+            let closestOrb = null;
+            let minDistance = Infinity;
+
+            // Find the closest orb regardless of clicking on it or not
+            for (const orb of orbs) {
+                const d = distance(mouse.x, mouse.y, orb.x, orb.y);
+                if (d < minDistance) {
+                    minDistance = d;
+                    closestOrb = orb;
+                }
+            }
+
+            // Only assign if we are not already dragging, to prevent attracting multiple orbs
+            if (!draggedOrb && closestOrb) {
+                draggedOrb = closestOrb;
+                draggedOrb.oldX = draggedOrb.x;
+                draggedOrb.oldY = draggedOrb.y;
+            }
+        });
+
+        canvas.addEventListener('mouseup', e => {
+            if (e.button !== 0) return; // Only react to left-click
+            mouse.isDown = false;
+            if (draggedOrb) {
+                switch (draggedOrb.color) {
+                    case COLORS.WHITE: draggedOrb.explode(); break;
+                    case COLORS.PURPLE: draggedOrb.pulse(); break;
+                    case COLORS.BLUE:
+                        let closestTarget = null;
+                        let minDistance = Infinity;
+                        for (const orb of orbs) {
+                            if (orb === draggedOrb || orb.state !== 'idle' || orb.isTargeted) continue;
+                            const d = distance(draggedOrb.x, draggedOrb.y, orb.x, orb.y);
+                            if (d < minDistance) {
+                                minDistance = d;
+                                closestTarget = orb;
+                            }
+                        }
+                        if (closestTarget) {
+                            draggedOrb.state = 'seeking_merge';
+                            draggedOrb.target = closestTarget;
+                            closestTarget.isTargeted = true;
+                        }
+                        break;
+                }
+                draggedOrb = null;
+            }
+        });
+        
+        canvas.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            shockwaves.push(new Shockwave(e.clientX, e.clientY));
+        });
+
+        function init() {
+            for (let i = 0; i < ORB_COUNT; i++) {
+                spawnOrb();
+                orbs[orbs.length - 1].state = 'idle';
+                orbs[orbs.length - 1].alpha = 1;
+                orbs[orbs.length - 1].radius = orbs[orbs.length - 1].baseRadius;
+            }
+            animate();
+        }
+        init();
+    </script>
+</body>
+</html>
+
