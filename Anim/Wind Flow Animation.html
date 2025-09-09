@@ -21,16 +21,6 @@
             top: 0;
             left: 0;
         }
-        /* Styling for the info text overlay */
-        .info {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 14px;
-            text-shadow: 0 0 5px rgba(0,0,0,0.5);
-            pointer-events: none; /* Allows mouse events to pass through to the canvas */
-        }
     </style>
     <!-- Google Fonts import for 'Inter' -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,9 +30,6 @@
 <body>
     <!-- The canvas element where the animation will be drawn -->
     <canvas id="windCanvas"></canvas>
-    
-    <!-- Simple text overlay to guide the user -->
-    <div class="info">Move your mouse to interact with the wind</div>
 
     <script>
         // --- SIMPLEX NOISE IMPLEMENTATION ---
