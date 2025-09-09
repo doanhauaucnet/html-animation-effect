@@ -52,6 +52,7 @@
         let mouse = { x: width / 2, y: height / 2, isDown: false };
         let draggedOrb = null;
         let frameCount = 0;
+        let maintainPopulation = false;
 
         // --- Background Glow ---
         const backgroundGlow = {
@@ -260,6 +261,7 @@
             lerp(start, end, amt) { return (1-amt)*start+amt*end; }
 
             draw() {
+                if (this.radius <= 0) return;
                 ctx.save();
                 ctx.globalCompositeOperation = 'lighter';
                 ctx.globalAlpha = this.alpha;
@@ -380,14 +382,14 @@
         class Shockwave {
             constructor(x, y){
                 this.x = x; this.y = y; this.radius = 0;
-                this.speed = 10; this.strength = 1.5; this.life = 1; this.hasBounced = false;
+                this.speed = 10; this.strength = 35; this.life = 1; this.hasBounced = false;
             }
             update(){
                 this.radius += this.speed; this.life -= 0.015;
                 if(!this.hasBounced && (this.x - this.radius < 0 || this.x + this.radius > width || this.y - this.radius < 0 || this.y + this.radius > height)){
                     this.hasBounced = true;
                      const rebound = new Shockwave(this.x, this.y);
-                     rebound.radius = this.radius; rebound.speed = -this.speed * 0.5;
+                     rebound.radius = Math.max(0, this.radius); rebound.speed = -this.speed * 0.5;
                      rebound.strength = -this.strength * 0.5; rebound.life = this.life * 0.8;
                      shockwaves.push(rebound);
                 }
@@ -700,7 +702,14 @@
             particles = particles.filter(p => !p.toRemove);
 
             frameCount++;
-            if (frameCount % 180 === 0) { balancePopulation(); }
+            if (maintainPopulation) {
+                // Keep trying to maintain population every frame for a short period
+                balancePopulation();
+                // Optional: stop after some frames to avoid permanent mode
+                if (frameCount % 600 === 0) maintainPopulation = false; // ~10s at 60fps
+            } else if (frameCount % 180 === 0) {
+                balancePopulation();
+            }
             requestAnimationFrame(animate);
         }
 
@@ -767,6 +776,7 @@
         canvas.addEventListener('contextmenu', e => {
             e.preventDefault();
             shockwaves.push(new Shockwave(e.clientX, e.clientY));
+            maintainPopulation = true; // Activate population maintenance
         });
 
         function init() {
