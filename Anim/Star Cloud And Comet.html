@@ -90,10 +90,11 @@ class Particle {
 
 // Gradual particle spawn
 function spawnParticles() {
-  if(particlesToSpawn > 0){
-    particles.push(new Particle());
-    particlesToSpawn--;
-    setTimeout(spawnParticles, 5); // spawn one every 5ms
+  if (particlesToSpawn > 0) {
+    const batch = Math.min(5, particlesToSpawn); // spawn up to 5 at a time
+    for (let i = 0; i < batch; i++) particles.push(new Particle());
+    particlesToSpawn -= batch;
+    setTimeout(spawnParticles, 5);
   }
 }
 spawnParticles();
