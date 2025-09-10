@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Realistic Snowflakes 3D</title>
+<title>Realistic Snowflakes 3D — Foreground Layer</title>
 <style>
   html, body {
     margin: 0;
@@ -37,19 +37,17 @@ window.addEventListener('resize', resize);
 resize();
 
 // Layers and parameters
-const LAYER_COUNT = 3;
-const SNOW_COUNTS = [40, 80, 150];
-const LAYER_SPEED = [0.6, 0.4, 0.2];
-const LAYER_SIZE_RANGE = [[2,4],[3,6],[5,10]];
-const ROTATION_SPEED = [[0.01,0.03],[0.008,0.02],[0.005,0.015]];
-const WIND_SWAY = [0.6,0.9,1.3];
-
-// Lifespan control
+const LAYER_COUNT = 4;
+const SNOW_COUNTS = [40, 80, 150, 25];
+const LAYER_SPEED = [0.6, 0.4, 0.25, 0.3];
+const LAYER_SIZE_RANGE = [[2,4],[3,6],[5,10],[12,22]];
+const ROTATION_SPEED = [[0.01,0.03],[0.008,0.02],[0.005,0.015],[0.003,0.01]];
+const WIND_SWAY = [0.6,0.9,1.3,1.5];
 const SNOW_MIN_LIFESPAN = 300;
 const SNOW_MAX_LIFESPAN = 800;
 
 let layers = [];
-let initialSpawn = true; // flag for initial spawn
+let initialSpawn = true;
 
 function rand(min,max){ return Math.random()*(max-min)+min; }
 
@@ -63,25 +61,22 @@ function initSnowflakes(){
     }
     layers.push(flakes);
   }
-  initialSpawn = false; // next spawns use top-half preference
+  initialSpawn = false;
 }
 
-// Create snowflake
 function makeFlake(layerIndex, spawnTop=false){
   const sizeRange = LAYER_SIZE_RANGE[layerIndex];
-
-  // Spawn size: smaller for top-half flakes but not tiny
   const targetSize = spawnTop 
-    ? rand(sizeRange[0]*0.6, sizeRange[1]*0.8) 
+    ? rand(sizeRange[0]*0.6, sizeRange[1]*0.8)
     : rand(sizeRange[0], sizeRange[1]);
-  const size = targetSize * 0.4; // start smaller, will grow
+  const size = targetSize * 0.4;
 
   let x = rand(0,width);
   let y;
   if(initialSpawn){
     y = rand(0,height);
   } else {
-    y = Math.random() < 0.8 ? rand(-50, height/2) : rand(-50, height);
+    y = Math.random()<0.8? rand(-50,height/2) : rand(-50,height);
   }
 
   const speed = LAYER_SPEED[layerIndex] * rand(0.8,1.2);
@@ -91,12 +86,11 @@ function makeFlake(layerIndex, spawnTop=false){
   const tilt = rand(0,Math.PI*2);
   const tiltSpeed = rand(0.01,0.03) * (Math.random()<0.5?-1:1);
   const lifespan = rand(SNOW_MIN_LIFESPAN,SNOW_MAX_LIFESPAN);
-  const alpha = 0; // fade in
+  const alpha = 0;
 
   return {x,y,size,targetSize,speed,swayPhase,rotation,rotationSpeed,tilt,tiltSpeed,lifespan,startY:y,alpha};
 }
 
-// Update snowflakes
 let last = performance.now();
 function step(now){
   const dt = Math.min(33, now-last);
@@ -112,32 +106,28 @@ function update(dt){
     const sway = WIND_SWAY[li];
     for(let s=0;s<layer.length;s++){
       const fl = layer[s];
-
-      // Movement
-      fl.y += fl.speed * (dt/16.67);
+      fl.y += fl.speed*(dt/16.67);
       fl.swayPhase += 0.003*(dt/16.67);
       fl.x += Math.sin(fl.swayPhase + s*0.01)*(sway*0.12)*(dt/16.67);
       fl.rotation += fl.rotationSpeed*(dt/16.67);
       fl.tilt += fl.tiltSpeed*(dt/16.67);
 
       // Fade in
-      if(fl.alpha < 1){
+      if(fl.alpha<1){
         fl.alpha += 0.01*(dt/16.67);
         if(fl.alpha>1) fl.alpha=1;
       }
 
-      // Gradually grow to target size
+      // Gradually grow
       if(fl.size < fl.targetSize){
         fl.size += 0.02*(dt/16.67);
-        if(fl.size > fl.targetSize) fl.size = fl.targetSize;
+        if(fl.size>fl.targetSize) fl.size = fl.targetSize;
       }
 
-      // Random shrink some flakes
-      if(Math.random()<0.002){
-        fl.size *= rand(0.92,0.98);
-      }
+      // Random shrink
+      if(Math.random()<0.002) fl.size *= rand(0.92,0.98);
 
-      // Fade out if too small or off canvas
+      // Fade out if off screen or too small
       if(fl.size<0.5 || fl.y>height+50 || fl.x<-100 || fl.x>width+100){
         fl.alpha -= 0.03*(dt/16.67);
         if(fl.alpha<=0){
@@ -148,11 +138,9 @@ function update(dt){
   }
 }
 
-// Draw
 function render(){
   ctx.clearRect(0,0,width,height);
 
-  // Background gradient
   const vg = ctx.createRadialGradient(width*0.5,height*0.3,Math.min(width,height)*0.2,width*0.5,height*0.5,Math.max(width,height));
   vg.addColorStop(0,'rgba(255,255,255,0.00)');
   vg.addColorStop(0.5,'rgba(4,8,20,0.08)');
@@ -160,7 +148,6 @@ function render(){
   ctx.fillStyle=vg;
   ctx.fillRect(0,0,width,height);
 
-  // Draw flakes
   for(let li=layers.length-1;li>=0;li--){
     const layer = layers[li];
     for(let i=0;i<layer.length;i++){
@@ -175,9 +162,9 @@ function drawFlake(fl){
   ctx.rotate(fl.rotation);
   ctx.globalAlpha = fl.alpha;
   ctx.strokeStyle = `rgba(180,230,255,${fl.alpha})`;
-  ctx.lineWidth = Math.min(3, Math.max(1, fl.size*0.05));
+  ctx.lineWidth = Math.min(5, Math.max(1, fl.size*0.05));
 
-  const armLength = Math.min(fl.size,10);
+  const armLength = Math.min(fl.size,12);
 
   for(let i=0;i<6;i++){
     ctx.save();
@@ -185,7 +172,6 @@ function drawFlake(fl){
     drawBranch(armLength);
     ctx.restore();
   }
-
   ctx.restore();
 }
 
@@ -199,7 +185,7 @@ function drawBranch(length){
   ctx.stroke();
 
   for(let i=1;i<=branchCount;i++){
-    const pos = (length/(branchCount+1))*i;
+    const pos=(length/(branchCount+1))*i;
     ctx.beginPath();
     ctx.moveTo(0,pos);
     ctx.lineTo(-subLength/2,pos+subLength);
