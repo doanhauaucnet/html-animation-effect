@@ -19,25 +19,6 @@
             display: block;
             background-color: #00000a; /* A very dark blue for the deep space feel */
         }
-
-        /* Style for the introductory text */
-        .intro-text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: rgba(255, 255, 255, 0.7);
-            font-family: 'Inter', 'Arial', sans-serif;
-            font-size: 1.5rem;
-            text-align: center;
-            pointer-events: none; /* Makes the text non-interactive */
-            transition: opacity 2s ease-out;
-            opacity: 1;
-        }
-
-        .intro-text.hidden {
-            opacity: 0;
-        }
     </style>
     <!-- Google Fonts for a clean, modern look -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -47,11 +28,6 @@
 <body>
     <!-- The canvas element where the animation will be drawn -->
     <canvas id="universeCanvas"></canvas>
-    
-    <!-- Introductory text to guide the user -->
-    <div id="introText" class="intro-text">
-        Move your mouse to stir the cosmos.
-    </div>
 
     <script>
         // --- Canvas and Context Setup ---
@@ -88,12 +64,6 @@
             mouse.x = null;
             mouse.y = null;
         });
-
-        // Hide the intro text after a delay
-        setTimeout(() => {
-            document.getElementById('introText').classList.add('hidden');
-        }, 3000);
-
 
         // --- Particle Class ---
         class Particle {
