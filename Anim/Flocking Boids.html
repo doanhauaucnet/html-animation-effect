@@ -303,9 +303,9 @@
                 ctx.translate(this.position.x, this.position.y);
                 ctx.rotate(angle);
                 ctx.beginPath();
-                ctx.moveTo(10, 0);
-                ctx.lineTo(-5, -5);
-                ctx.lineTo(-5, 5);
+                ctx.moveTo(10, 0); // tip
+                ctx.quadraticCurveTo(0, -5, -5, 0);
+                ctx.quadraticCurveTo(0, 5, 10, 0);
                 ctx.closePath();
                 const lightness = 60 + (Math.sqrt(this.velocity.x**2 + this.velocity.y**2) / this.maxSpeed) * 20;
                 ctx.fillStyle = `hsl(${this.hue}, 100%, ${lightness}%)`;
