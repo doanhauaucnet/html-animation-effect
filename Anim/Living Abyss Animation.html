@@ -21,7 +21,6 @@
             overflow: hidden; /* Hide scrollbars */
             font-family: 'Cinzel', serif;
             color: #a7d8ff;
-            cursor: none; /* Hide the default cursor */
         }
 
         /* Canvas styling to fill the entire viewport */
@@ -69,18 +68,6 @@
             to { opacity: 1; }
         }
 
-        /* Custom cursor styling */
-        .cursor-light {
-            position: fixed;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(167, 216, 255, 0.2) 0%, rgba(167, 216, 255, 0) 70%);
-            pointer-events: none;
-            transform: translate(-50%, -50%);
-            transition: transform 0.1s ease-out;
-            z-index: 1000;
-        }
     </style>
 </head>
 <body>
@@ -92,17 +79,14 @@
     
     <canvas id="abyssCanvas"></canvas>
 
-    <div class="cursor-light"></div>
-
     <script>
         // --- Canvas and Context Setup ---
         const canvas = document.getElementById('abyssCanvas');
         const ctx = canvas.getContext('2d');
         let width, height;
 
-        // --- Mouse and Cursor Setup ---
+        // --- Mouse Setup ---
         const mouse = { x: null, y: null, radius: 100 };
-        const cursorLight = document.querySelector('.cursor-light');
 
         // --- Animation Entities ---
         let particles = [];
@@ -301,9 +285,6 @@
         window.addEventListener('mousemove', (e) => {
             mouse.x = e.x;
             mouse.y = e.y;
-            // Move the custom cursor light
-            cursorLight.style.left = e.clientX + 'px';
-            cursorLight.style.top = e.clientY + 'px';
         });
 
         window.addEventListener('mouseout', () => {
