@@ -75,8 +75,12 @@
       const LABEL_HOVER_RADIUS = 120;
 
       let mouse = { x: null, y: null };
+      let slowMode = false;
+      let fastMode = false;
+      let slowTimeout = null;
+      let fastTimeout = null;
 
-      // --- Metro Data (Expanded) ---
+      // --- Metro Data ---
       const stations = {
         Shibuya: { x: width * 0.25, y: height * 0.8 },
         Shinjuku: { x: width * 0.2, y: height * 0.5 },
@@ -133,7 +137,6 @@
         { color: "#00cccc", path: ["Tokyo", "Akihabara", "Asakusa"] },
       ];
 
-      // Map primary color for each station
       const stationColors = {};
       for (const line of lines) {
         for (const station of line.path) {
@@ -189,8 +192,16 @@
             this.setNextTarget();
             return;
           }
-          this.vx = (dx / dist) * this.speed;
-          this.vy = (dy / dist) * this.speed;
+
+          let currentSpeed = this.speed;
+          if (slowMode) {
+            currentSpeed *= 0.1;
+          } else if (fastMode) {
+            currentSpeed *= 3;
+          }
+
+          this.vx = (dx / dist) * currentSpeed;
+          this.vy = (dy / dist) * currentSpeed;
 
           if (mouse.x && mouse.y) {
             const mdx = this.x - mouse.x,
@@ -203,6 +214,7 @@
               this.vy += (mdy / mdist) * force * MOUSE_REPEL_STRENGTH;
             }
           }
+
           this.x += this.vx;
           this.y += this.vy;
         }
@@ -261,53 +273,27 @@
           p.update();
           p.draw();
         });
-        // --- Add a property to store last rotation ---
-        Object.keys(stationLabels).forEach((name) => {
-          stationLabels[name].lastRotation = 0;
-        });
 
-        // --- Update labels ---
-        const MAX_ROTATION_SPEED = 0.1; // radians per frame (~5.7 degrees)
-
+        // Update labels
         Object.entries(stations).forEach(([name, pos]) => {
           const label = stationLabels[name];
-          if (mouse.x !== null && mouse.y !== null) {
-            const dx = mouse.x - pos.x,
-              dy = mouse.y - pos.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < LABEL_HOVER_RADIUS) {
-              const scale = 1 + 0.5 * (1 - dist / LABEL_HOVER_RADIUS);
-
-              let targetRotation = 0;
-              if (scale < 1 + 0.5 * 0.5) {
-                // rotate only under 50% max scale
-                const angle = Math.atan2(dy, dx);
-                targetRotation = angle * (1 - (scale - 1) / 0.5);
-              }
-
-              // Cap rotation speed
-              let delta = targetRotation - label.lastRotation;
-              if (delta > MAX_ROTATION_SPEED) delta = MAX_ROTATION_SPEED;
-              if (delta < -MAX_ROTATION_SPEED) delta = -MAX_ROTATION_SPEED;
-              label.lastRotation += delta;
-
-              label.style.transform = `
-                translate(-50%, -100%)
-                scale(${scale})
-                rotate(${label.lastRotation}rad)
-            `;
-            } else {
-              label.style.transform =
-                "translate(-50%, -100%) scale(0) rotate(0rad)";
-              label.lastRotation = 0;
-            }
+          if (slowMode || fastMode) {
+            label.style.transform = "translate(-50%, -100%) scale(1)";
           } else {
-            label.style.transform =
-              "translate(-50%, -100%) scale(0) rotate(0rad)";
-            label.lastRotation = 0;
+            if (mouse.x !== null && mouse.y !== null) {
+              const dx = mouse.x - pos.x,
+                dy = mouse.y - pos.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < LABEL_HOVER_RADIUS) {
+                const scale = 1 + 0.5 * (1 - dist / LABEL_HOVER_RADIUS);
+                label.style.transform = `translate(-50%, -100%) scale(${scale})`;
+              } else {
+                label.style.transform = "translate(-50%, -100%) scale(0)";
+              }
+            } else {
+              label.style.transform = "translate(-50%, -100%) scale(0)";
+            }
           }
-
           label.style.left = pos.x + "px";
           label.style.top = pos.y + "px";
         });
@@ -329,6 +315,43 @@
       window.addEventListener("mouseout", () => {
         mouse.x = null;
         mouse.y = null;
+      });
+
+      window.addEventListener("click", (e) => {
+        if (e.button === 0) {
+          // Cancel fast mode if active
+          if (fastTimeout) clearTimeout(fastTimeout);
+          fastMode = false;
+
+          // Activate slow mode
+          slowMode = true;
+          Object.values(stationLabels).forEach((label) => {
+            label.style.transform = "translate(-50%, -100%) scale(1)";
+          });
+
+          if (slowTimeout) clearTimeout(slowTimeout);
+          slowTimeout = setTimeout(() => {
+            slowMode = false;
+          }, 5000);
+        }
+      });
+
+      window.addEventListener("contextmenu", (e) => {
+        e.preventDefault(); // prevent browser context menu
+
+        if (slowTimeout) clearTimeout(slowTimeout);
+        slowMode = false;
+
+        // Activate fast mode
+        fastMode = true;
+        Object.values(stationLabels).forEach((label) => {
+          label.style.transform = "translate(-50%, -100%) scale(1)";
+        });
+
+        if (fastTimeout) clearTimeout(fastTimeout);
+        fastTimeout = setTimeout(() => {
+          fastMode = false;
+        }, 5000);
       });
 
       animate();
