@@ -42,6 +42,7 @@ const SNOW_COUNTS = [40, 80, 150, 25];
 const LAYER_SPEED = [0.6, 0.4, 0.25, 0.3];
 const LAYER_SIZE_RANGE = [[2,4],[3,6],[5,10],[12,22]];
 const ROTATION_SPEED = [[0.01,0.03],[0.008,0.02],[0.005,0.015],[0.003,0.01]];
+const TILT_SPEED = [[0.002, 0.006], [0.003, 0.008], [0.005, 0.012], [0.002, 0.012]];
 const WIND_SWAY = [0.6,0.9,1.3,1.5];
 const SNOW_MIN_LIFESPAN = 300;
 const SNOW_MAX_LIFESPAN = 800;
@@ -84,7 +85,8 @@ function makeFlake(layerIndex, spawnTop=false){
   const rotation = rand(0,Math.PI*2);
   const rotationSpeed = rand(ROTATION_SPEED[layerIndex][0], ROTATION_SPEED[layerIndex][1]) * (Math.random()<0.5?-1:1);
   const tilt = rand(0,Math.PI*2);
-  const tiltSpeed = rand(0.01,0.03) * (Math.random()<0.5?-1:1);
+  const tiltSpeed = rand(TILT_SPEED[layerIndex][0], TILT_SPEED[layerIndex][1]) 
+                  * (Math.random()<0.5 ? -1 : 1);
   const lifespan = rand(SNOW_MIN_LIFESPAN,SNOW_MAX_LIFESPAN);
   const alpha = 0;
 
