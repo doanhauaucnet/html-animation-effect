@@ -13,7 +13,6 @@
                 linear-gradient(180deg, #07102a 0%, #0b1b3a 60%, #081024 100%);
     font-family: Inter, sans-serif;
   }
-
   canvas { display: block; width:100vw; height:100vh; }
 </style>
 </head>
@@ -73,25 +72,23 @@ function makeFlake(layerIndex, spawnTop=false){
   const size = targetSize * 0.4;
 
   let x = rand(0,width);
-  let y;
-  if(initialSpawn){
-    y = rand(0,height);
-  } else {
-    y = Math.random()<0.8? rand(-50,height/2) : rand(-50,height);
-  }
+  let y = initialSpawn ? rand(0,height) : (Math.random()<0.8? rand(-50,height/2) : rand(-50,height));
 
   const speed = LAYER_SPEED[layerIndex] * rand(0.8,1.2);
   const swayPhase = rand(0,Math.PI*2);
   const rotation = rand(0,Math.PI*2);
   const rotationSpeed = rand(ROTATION_SPEED[layerIndex][0], ROTATION_SPEED[layerIndex][1]) * (Math.random()<0.5?-1:1);
   const tilt = rand(0,Math.PI*2);
-  const tiltSpeed = rand(TILT_SPEED[layerIndex][0], TILT_SPEED[layerIndex][1]) 
-                  * (Math.random()<0.5 ? -1 : 1);
+  const tiltSpeed = rand(TILT_SPEED[layerIndex][0], TILT_SPEED[layerIndex][1]) * (Math.random()<0.5 ? -1 : 1);
   const lifespan = rand(SNOW_MIN_LIFESPAN,SNOW_MAX_LIFESPAN);
   const alpha = 0;
 
-  return {x,y,size,targetSize,speed,swayPhase,rotation,rotationSpeed,tilt,tiltSpeed,lifespan,startY:y,alpha};
+  return {x,y,size,targetSize,speed,swayPhase,rotation,rotationSpeed,tilt,tiltSpeed,lifespan,startY:y,alpha,vx:0,vy:0};
 }
+
+// Mouse interaction
+let mouse = {x: width/2, y: height/2};
+canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 
 let last = performance.now();
 function step(now){
@@ -108,34 +105,40 @@ function update(dt){
     const sway = WIND_SWAY[li];
     for(let s=0;s<layer.length;s++){
       const fl = layer[s];
-      fl.y += fl.speed*(dt/16.67);
+
+      // Falling physics
+      fl.y += fl.speed*(dt/16.67) + fl.vy;
       fl.swayPhase += 0.003*(dt/16.67);
-      fl.x += Math.sin(fl.swayPhase + s*0.01)*(sway*0.12)*(dt/16.67);
+      fl.x += Math.sin(fl.swayPhase + s*0.01)*(sway*0.12)*(dt/16.67) + fl.vx;
       fl.rotation += fl.rotationSpeed*(dt/16.67);
       fl.tilt += fl.tiltSpeed*(dt/16.67);
 
       // Fade in
-      if(fl.alpha<1){
-        fl.alpha += 0.01*(dt/16.67);
-        if(fl.alpha>1) fl.alpha=1;
-      }
+      if(fl.alpha<1){ fl.alpha += 0.01*(dt/16.67); if(fl.alpha>1) fl.alpha=1; }
 
       // Gradually grow
-      if(fl.size < fl.targetSize){
-        fl.size += 0.02*(dt/16.67);
-        if(fl.size>fl.targetSize) fl.size = fl.targetSize;
-      }
+      if(fl.size < fl.targetSize){ fl.size += 0.02*(dt/16.67); if(fl.size>fl.targetSize) fl.size = fl.targetSize; }
 
       // Random shrink
       if(Math.random()<0.002) fl.size *= rand(0.92,0.98);
 
-      // Fade out if off screen or too small
+      // Fade out if off screen
       if(fl.size<0.5 || fl.y>height+50 || fl.x<-100 || fl.x>width+100){
         fl.alpha -= 0.03*(dt/16.67);
-        if(fl.alpha<=0){
-          Object.assign(fl, makeFlake(li,true));
-        }
+        if(fl.alpha<=0){ Object.assign(fl, makeFlake(li,true)); }
       }
+
+      // Mouse push (3D illusion)
+      const dx = fl.x - mouse.x;
+      const dy = fl.y - mouse.y;
+      const dist = Math.sqrt(dx*dx + dy*dy) + 0.1;
+      const force = Math.min(0.5, 200/dist/dist); // falloff with distance
+      fl.vx += (dx/dist) * force * 0.1;
+      fl.vy += (dy/dist) * force * 0.05;
+
+      // Apply friction so velocity settles naturally
+      fl.vx *= 0.92;
+      fl.vy *= 0.92;
     }
   }
 }
@@ -167,7 +170,7 @@ function drawFlake(fl){
 
   // Apply vertical spin illusion (like flipping)
   const tiltScale = Math.cos(fl.tilt); 
-  ctx.scale(tiltScale, 1); // squash horizontally
+  ctx.scale(tiltScale, 1);
 
   ctx.globalAlpha = fl.alpha;
   ctx.strokeStyle = `rgba(180,230,255,${fl.alpha})`;
@@ -183,7 +186,6 @@ function drawFlake(fl){
   }
   ctx.restore();
 }
-
 
 function drawBranch(length){
   const branchCount=2;
