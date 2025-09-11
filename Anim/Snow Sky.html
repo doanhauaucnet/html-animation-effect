@@ -159,7 +159,14 @@ function render(){
 function drawFlake(fl){
   ctx.save();
   ctx.translate(fl.x, fl.y);
+
+  // Apply horizontal rotation
   ctx.rotate(fl.rotation);
+
+  // Apply vertical spin illusion (like flipping)
+  const tiltScale = Math.cos(fl.tilt); 
+  ctx.scale(tiltScale, 1); // squash horizontally
+
   ctx.globalAlpha = fl.alpha;
   ctx.strokeStyle = `rgba(180,230,255,${fl.alpha})`;
   ctx.lineWidth = Math.min(5, Math.max(1, fl.size*0.05));
@@ -174,6 +181,7 @@ function drawFlake(fl){
   }
   ctx.restore();
 }
+
 
 function drawBranch(length){
   const branchCount=2;
