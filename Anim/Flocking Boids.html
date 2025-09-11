@@ -394,6 +394,7 @@
           this.perceptionRadius = 200;
           this.currentTarget = null;
           this.targetCooldown = 0; // frames before re-picking
+          this.size = 18;
         }
 
         seek(boids) {
@@ -446,6 +447,22 @@
           const steering = this._calculateSteeringForce(desired);
           this.acceleration.x += steering.x;
           this.acceleration.y += steering.y;
+        }
+        draw() {
+          const angle = Math.atan2(this.velocity.y, this.velocity.x);
+          ctx.save();
+          ctx.translate(this.position.x, this.position.y);
+          ctx.rotate(angle);
+          ctx.beginPath();
+          ctx.moveTo(this.size, 0); // nose
+          ctx.lineTo(-this.size / 2, -this.size / 2);
+          ctx.lineTo(-this.size / 2, this.size / 2);
+          ctx.closePath();
+          ctx.fillStyle = `hsl(${this.hue}, 100%, 65%)`;
+          ctx.shadowColor = `hsl(${this.hue}, 100%, 65%)`;
+          ctx.shadowBlur = 20;
+          ctx.fill();
+          ctx.restore();
         }
       }
 
