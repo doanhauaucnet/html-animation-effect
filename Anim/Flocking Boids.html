@@ -388,59 +388,64 @@
       class Predator extends Boid {
         constructor(x, y) {
           super(x, y);
-          this.maxSpeed = 5; // Slightly faster
+          this.maxSpeed = 5;
           this.maxForce = 0.1;
-          this.hue = 0; // Red
-          this.perceptionRadius = 200; // Can see farther
+          this.hue = 0;
+          this.perceptionRadius = 200;
+          this.currentTarget = null;
+          this.targetCooldown = 0; // frames before re-picking
         }
 
         seek(boids) {
-          let closest = null;
-          let closestDist = Infinity;
+          if (this.currentTarget && boids.includes(this.currentTarget)) {
+            // If target still valid and close enough
+            const d = Math.hypot(
+              this.position.x - this.currentTarget.position.x,
+              this.position.y - this.currentTarget.position.y
+            );
+            if (d < this.perceptionRadius) {
+              return this._steerTo(this.currentTarget.position);
+            }
+          }
+
+          // Cooldown before picking a new one
+          if (this.targetCooldown > 0) {
+            this.targetCooldown--;
+            return; // wander / do nothing
+          }
+
+          // Find a new target
+          let closest = null,
+            closestDist = Infinity;
           for (let boid of boids) {
-            const d = Math.sqrt(
-              Math.pow(this.position.x - boid.position.x, 2) +
-                Math.pow(this.position.y - boid.position.y, 2)
+            const d = Math.hypot(
+              this.position.x - boid.position.x,
+              this.position.y - boid.position.y
             );
             if (d < closestDist && d < this.perceptionRadius) {
               closestDist = d;
               closest = boid;
             }
           }
-
           if (closest) {
-            let desired = {
-              x: closest.position.x - this.position.x,
-              y: closest.position.y - this.position.y,
-            };
-            const mag = Math.sqrt(
-              desired.x * desired.x + desired.y * desired.y
-            );
-            desired.x = (desired.x / mag) * this.maxSpeed;
-            desired.y = (desired.y / mag) * this.maxSpeed;
-
-            const steering = this._calculateSteeringForce(desired);
-            this.acceleration.x += steering.x;
-            this.acceleration.y += steering.y;
+            this.currentTarget = closest;
+            this.targetCooldown = 60; // stick for ~1 sec at 60fps
+            return this._steerTo(closest.position);
           }
         }
 
-        draw() {
-          const angle = Math.atan2(this.velocity.y, this.velocity.x);
-          ctx.save();
-          ctx.translate(this.position.x, this.position.y);
-          ctx.rotate(angle);
-          ctx.beginPath();
-          // Larger, more aggressive triangle
-          ctx.moveTo(15, 0);
-          ctx.lineTo(-7, -7);
-          ctx.lineTo(-7, 7);
-          ctx.closePath();
-          ctx.fillStyle = `hsl(${this.hue}, 100%, 65%)`;
-          ctx.shadowColor = `hsl(${this.hue}, 100%, 65%)`;
-          ctx.shadowBlur = 15;
-          ctx.fill();
-          ctx.restore();
+        _steerTo(targetPos) {
+          let desired = {
+            x: targetPos.x - this.position.x,
+            y: targetPos.y - this.position.y,
+          };
+          const mag = Math.hypot(desired.x, desired.y);
+          desired.x = (desired.x / mag) * this.maxSpeed;
+          desired.y = (desired.y / mag) * this.maxSpeed;
+
+          const steering = this._calculateSteeringForce(desired);
+          this.acceleration.x += steering.x;
+          this.acceleration.y += steering.y;
         }
       }
 
