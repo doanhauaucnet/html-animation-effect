@@ -1,34 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Stardust Visualization</title>
+    <title>Interactive Stardust Layers</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #02010a; /* Deep dark indigo */
+            background-color: #02010a;
             font-family: 'Inter', sans-serif;
         }
 
         canvas {
             display: block;
         }
-        
-        @media (max-width: 768px) {
-            .overlay-text h1 {
-                font-size: 2.5rem;
-            }
-            .overlay-text p {
-                font-size: 1rem;
-            }
-        }
     </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;600&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <canvas id="stardustCanvas"></canvas>
 
@@ -38,19 +28,18 @@
 
         const PARTICLE_COUNT = 150;
         const MAX_LINE_DISTANCE = 120;
-        const MOUSE_INTERACTION_RADIUS = 200;
         const BASE_SPEED = 0.5;
-        const FOLLOW_THRESHOLD = 80;  // max distance a particle shifts toward mouse
 
         const PARTICLE_COLORS = [
-            'rgba(255, 77, 133, 0.9)', 
-            'rgba(155, 77, 255, 0.9)', 
-            'rgba(77, 181, 255, 0.9)', 
-            'rgba(255, 217, 77, 0.9)', 
-            'rgba(240, 240, 250, 0.9)'  
+            'rgba(255, 77, 133, 0.9)',
+            'rgba(155, 77, 255, 0.9)',
+            'rgba(77, 181, 255, 0.9)',
+            'rgba(255, 217, 77, 0.9)',
+            'rgba(240, 240, 250, 0.9)'
         ];
 
-        let particles = [];
+        let layers = [];
+        const LAYER_COUNT = 3; // number of layers
         let mouse = { x: null, y: null };
 
         function setCanvasSize() {
@@ -59,7 +48,7 @@
         }
 
         class Particle {
-            constructor(x, y, directionX, directionY, radius, color) {
+            constructor(x, y, directionX, directionY, radius, color, layerStrength) {
                 this.x = x;
                 this.y = y;
                 this.baseX = x;
@@ -68,6 +57,7 @@
                 this.directionY = directionY;
                 this.radius = radius;
                 this.color = color;
+                this.layerStrength = layerStrength; // Mouse influence multiplier
             }
 
             draw() {
@@ -90,99 +80,97 @@
                     this.directionY = -this.directionY;
                 }
 
+                // Always keep a bit of random floating drift
+                this.directionX += (Math.random() - 0.5) * 0.02;
+                this.directionY += (Math.random() - 0.5) * 0.02;
+
                 this.x += this.directionX;
                 this.y += this.directionY;
 
-                // --- Parallax Effect with Threshold ---
+                // Parallax mouse effect
                 if (mouse.x !== null && mouse.y !== null) {
                     let dx = mouse.x - this.baseX;
                     let dy = mouse.y - this.baseY;
                     let dist = Math.sqrt(dx * dx + dy * dy);
 
-                    if (dist < canvas.width) {
-                        // Effect strength decreases with distance
-                        let effectStrength = Math.max(0, 1 - dist / (canvas.width * 0.8));
-                        // Calculate target position (limited to FOLLOW_THRESHOLD)
-                        let angle = Math.atan2(dy, dx);
-                        let limitedDx = Math.cos(angle) * Math.min(FOLLOW_THRESHOLD, Math.abs(dx));
-                        let limitedDy = Math.sin(angle) * Math.min(FOLLOW_THRESHOLD, Math.abs(dy));
+                    let effectStrength = this.layerStrength * Math.max(0, 1 - dist / (canvas.width * 0.8));
+                    let targetX = this.baseX + dx * effectStrength;
+                    let targetY = this.baseY + dy * effectStrength;
 
-                        let targetX = this.baseX + limitedDx * effectStrength;
-                        let targetY = this.baseY + limitedDy * effectStrength;
-
-                        // Smooth follow
-                        this.x += (targetX - this.x) * 0.05;
-                        this.y += (targetY - this.y) * 0.05;
-                    }
-                } else {
-                    // Drift back to base when no mouse
-                    this.x += (this.baseX - this.x) * 0.02;
-                    this.y += (this.baseY - this.y) * 0.02;
+                    // Gently pull toward target, but weaker to keep freedom
+                    this.x += (targetX - this.x) * 0.01;
+                    this.y += (targetY - this.y) * 0.01;
                 }
 
                 this.draw();
             }
+
         }
 
         function init() {
-            particles = [];
-            let particleDensity = (canvas.height * canvas.width) / 9000;
-            for (let i = 0; i < particleDensity && i < PARTICLE_COUNT; i++) {
-                let radius = Math.random() * 2 + 1;
-                let x = Math.random() * (canvas.width - radius * 2) + radius;
-                let y = Math.random() * (canvas.height - radius * 2) + radius;
-                let directionX = (Math.random() - 0.5) * (Math.random() * BASE_SPEED + 0.1);
-                let directionY = (Math.random() - 0.5) * (Math.random() * BASE_SPEED + 0.1);
-                let color = PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)];
-                particles.push(new Particle(x, y, directionX, directionY, radius, color));
+            layers = [];
+            for (let l = 0; l < LAYER_COUNT; l++) {
+                let layer = [];
+                let layerStrength = 0.1 + (l / LAYER_COUNT) * 0.5; // Front layers react more
+                let particleDensity = (canvas.height * canvas.width) / 9000;
+                for (let i = 0; i < particleDensity && i < PARTICLE_COUNT / LAYER_COUNT; i++) {
+                    let radius = Math.random() * 2 + 1;
+                    let x = Math.random() * (canvas.width - radius * 2) + radius;
+                    let y = Math.random() * (canvas.height - radius * 2) + radius;
+                    let directionX = (Math.random() - 0.5) * (Math.random() * BASE_SPEED + 0.1);
+                    let directionY = (Math.random() - 0.5) * (Math.random() * BASE_SPEED + 0.1);
+                    let color = PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)];
+                    layer.push(new Particle(x, y, directionX, directionY, radius, color, layerStrength));
+                }
+                layers.push(layer);
             }
         }
 
         function connect() {
-            for (let i = 0; i < particles.length; i++) {
-                for (let j = i + 1; j < particles.length; j++) {
-                    let dx = particles[i].x - particles[j].x;
-                    let dy = particles[i].y - particles[j].y;
-                    let distance = Math.sqrt(dx * dx + dy * dy);
+            layers.forEach(layer => {
+                for (let i = 0; i < layer.length; i++) {
+                    for (let j = i + 1; j < layer.length; j++) {
+                        let dx = layer[i].x - layer[j].x;
+                        let dy = layer[i].y - layer[j].y;
+                        let distance = Math.sqrt(dx * dx + dy * dy);
 
-                    if (distance < MAX_LINE_DISTANCE) {
-                        let opacity = 1 - (distance / MAX_LINE_DISTANCE);
-                        ctx.strokeStyle = `rgba(255, 229, 180, ${opacity * 0.4})`;
-                        ctx.lineWidth = 1;
-                        ctx.beginPath();
-                        ctx.moveTo(particles[i].x, particles[i].y);
-                        ctx.lineTo(particles[j].x, particles[j].y);
-                        ctx.stroke();
-                        ctx.closePath();
+                        if (distance < MAX_LINE_DISTANCE) {
+                            let opacity = 1 - distance / MAX_LINE_DISTANCE;
+                            ctx.strokeStyle = `rgba(255, 229, 180, ${opacity * 0.4})`;
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.moveTo(layer[i].x, layer[i].y);
+                            ctx.lineTo(layer[j].x, layer[j].y);
+                            ctx.stroke();
+                            ctx.closePath();
+                        }
+                    }
+
+                    if (mouse.x !== null && mouse.y !== null) {
+                        let dx = layer[i].x - mouse.x;
+                        let dy = layer[i].y - mouse.y;
+                        let distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < 200) {
+                            let opacity = 1 - distance / 200;
+                            ctx.strokeStyle = `rgba(255, 229, 180, ${opacity * 0.8})`;
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.moveTo(layer[i].x, layer[i].y);
+                            ctx.lineTo(mouse.x, mouse.y);
+                            ctx.stroke();
+                            ctx.closePath();
+                        }
                     }
                 }
-
-                if (mouse.x !== null && mouse.y !== null) {
-                    let dx = particles[i].x - mouse.x;
-                    let dy = particles[i].y - mouse.y;
-                    let distance = Math.sqrt(dx * dx + dy * dy);
-
-                    if (distance < MOUSE_INTERACTION_RADIUS) {
-                        let opacity = 1 - (distance / MOUSE_INTERACTION_RADIUS);
-                        ctx.strokeStyle = `rgba(255, 229, 180, ${opacity * 0.8})`;
-                        ctx.lineWidth = 1;
-                        ctx.beginPath();
-                        ctx.moveTo(particles[i].x, particles[i].y);
-                        ctx.lineTo(mouse.x, mouse.y);
-                        ctx.stroke();
-                        ctx.closePath();
-                    }
-                }
-            }
+            });
         }
 
         function animate() {
             requestAnimationFrame(animate);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            for (let i = 0; i < particles.length; i++) {
-                particles[i].update();
-            }
+            layers.forEach(layer => layer.forEach(p => p.update()));
             connect();
         }
 
@@ -195,7 +183,7 @@
             mouse.x = event.x;
             mouse.y = event.y;
         });
-        
+
         window.addEventListener('mouseout', () => {
             mouse.x = null;
             mouse.y = null;
@@ -206,4 +194,5 @@
         animate();
     </script>
 </body>
+
 </html>
