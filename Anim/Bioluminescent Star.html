@@ -1,152 +1,129 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bioluminescent Starfield</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: radial-gradient(ellipse at center, #00021a 0%, #000010 100%);
-            overflow: hidden;
-            font-family: 'Inter', sans-serif;
-        }
-
-        canvas { 
-            display: block; 
-        }
-
-        @keyframes glow {
-            from {
-                text-shadow: 0 0 15px rgba(255,255,255,0.7), 0 0 40px #A7C5EB, 0 0 80px #B2F7EF;
-            }
-            to {
-                text-shadow: 0 0 20px rgba(255,255,255,1), 0 0 50px #FFFB7D, 0 0 100px #85FFBD;
-            }
-        }
-    </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bioluminescent Starfield</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        background: radial-gradient(ellipse at center, #00021a 0%, #000010 100%);
+        overflow: hidden;
+        font-family: 'Inter', sans-serif;
+    }
+    canvas { display: block; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <canvas id="nebulaCanvas"></canvas>
+<canvas id="nebulaCanvas"></canvas>
 
-    <script>
-        const canvas = document.getElementById('nebulaCanvas');
-        const ctx = canvas.getContext('2d');
+<script>
+const canvas = document.getElementById('nebulaCanvas');
+const ctx = canvas.getContext('2d');
 
-        let width = canvas.width = window.innerWidth;
-        let height = canvas.height = window.innerHeight;
+let width = canvas.width = window.innerWidth;
+let height = canvas.height = window.innerHeight;
 
-        const mouse = { x: null, y: null, radius: 180 };
+const mouse = { x: null, y: null, radius: 180 };
+window.addEventListener('mousemove', e => { mouse.x = e.x; mouse.y = e.y; });
+window.addEventListener('mouseout', () => { mouse.x = null; mouse.y = null; });
 
-        window.addEventListener('mousemove', (event) => {
-            mouse.x = event.x;
-            mouse.y = event.y;
-        });
+const numberOfParticles = 250;
+const particleColors = ['#85FFBD', '#FFFB7D', '#B2F7EF', '#A7C5EB', '#F0D2E6'];
+let particlesArray = [];
 
-        window.addEventListener('mouseout', () => {
-            mouse.x = null;
-            mouse.y = null;
-        });
+class Particle {
+    constructor(x, y, dx, dy, size, color) {
+        this.x = x;
+        this.y = y;
+        this.dx = dx;
+        this.dy = dy;
+        this.size = size;
+        this.color = color;
+        this.baseX = x;
+        this.baseY = y;
+        this.density = (Math.random() * 40) + 5;
+        this.pulse = Math.random() * Math.PI * 2;
+    }
 
-        let particlesArray = [];
-        const numberOfParticles = 250;
-        const particleColors = ['#85FFBD', '#FFFB7D', '#B2F7EF', '#A7C5EB', '#F0D2E6'];
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = this.color;
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
 
-        class Particle {
-            constructor(x, y, directionX, directionY, size, color) {
-                this.x = x;
-                this.y = y;
-                this.directionX = directionX;
-                this.directionY = directionY;
-                this.size = size;
-                this.color = color;
-                this.baseX = this.x;
-                this.baseY = this.y;
-                this.density = (Math.random() * 40) + 5;
-                this.pulse = Math.random() * Math.PI * 2;
-            }
+    update() {
+        // Pulsating size
+        this.pulse += 0.03;
+        this.size = 1.5 + Math.sin(this.pulse) * 1.2;
 
-            draw() {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2, false);
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = this.color;
-                ctx.fillStyle = this.color;
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            }
-
-            update() {
-                // subtle pulsating effect
-                this.pulse += 0.03;
-                this.size = 1.5 + Math.sin(this.pulse) * 1.2;
-
-                let dx = mouse.x - this.x;
-                let dy = mouse.y - this.y;
-                let distance = Math.sqrt(dx * dx + dy * dy);
-                let forceDirectionX = dx / distance;
-                let forceDirectionY = dy / distance;
-                let maxDistance = mouse.radius;
-                let force = (maxDistance - distance) / maxDistance;
-
-                if (distance < mouse.radius) {
-                    this.x -= forceDirectionX * force * this.density;
-                    this.y -= forceDirectionY * force * this.density;
-                } else {
-                    if (this.x !== this.baseX) {
-                        let dx = this.x - this.baseX;
-                        this.x -= dx / 30;
-                    }
-                    if (this.y !== this.baseY) {
-                        let dy = this.y - this.baseY;
-                        this.y -= dy / 30;
-                    }
-                }
-
-                this.x += this.directionX;
-                this.y += this.directionY;
-                this.draw();
+        if (mouse.x !== null && mouse.y !== null) {
+            const dx = mouse.x - this.x;
+            const dy = mouse.y - this.y;
+            const distance = dx * dx + dy * dy; // Using squared distance (avoids sqrt)
+            const maxDist = mouse.radius * mouse.radius;
+            if (distance < maxDist) {
+                const force = (1 - distance / maxDist) * this.density;
+                const angle = Math.atan2(dy, dx);
+                this.x -= Math.cos(angle) * force;
+                this.y -= Math.sin(angle) * force;
             }
         }
 
-        function init() {
-            particlesArray = [];
-            for (let i = 0; i < numberOfParticles; i++) {
-                let size = (Math.random() * 2) + 1;
-                let x = (Math.random() * (width - size * 2) + size);
-                let y = (Math.random() * (height - size * 2) + size);
-                let directionX = (Math.random() * 0.3) - 0.15;
-                let directionY = (Math.random() * 0.3) - 0.15;
-                let color = particleColors[Math.floor(Math.random() * particleColors.length)];
-                particlesArray.push(new Particle(x, y, directionX, directionY, size, color));
-            }
-        }
+        // Return to base
+        const dxBase = this.x - this.baseX;
+        const dyBase = this.y - this.baseY;
+        if (dxBase !== 0) this.x -= dxBase / 30;
+        if (dyBase !== 0) this.y -= dyBase / 30;
 
-        function animate() {
-            ctx.fillStyle = 'rgba(0, 2, 26, 0.15)';
-            ctx.fillRect(0, 0, width, height);
-            for (let i = 0; i < particlesArray.length; i++) {
-                particlesArray[i].update();
-            }
-            requestAnimationFrame(animate);
-        }
+        // Apply movement
+        this.x += this.dx;
+        this.y += this.dy;
 
-        window.addEventListener('resize', () => {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-            init();
-        });
+        this.draw();
+    }
+}
 
-        init();
-        animate();
-    </script>
+function init() {
+    particlesArray = [];
+    for (let i = 0; i < numberOfParticles; i++) {
+        const size = Math.random() * 2 + 1;
+        const x = Math.random() * (width - size * 2) + size;
+        const y = Math.random() * (height - size * 2) + size;
+        const dx = (Math.random() - 0.5) * 0.3;
+        const dy = (Math.random() - 0.5) * 0.3;
+        const color = particleColors[Math.floor(Math.random() * particleColors.length)];
+        particlesArray.push(new Particle(x, y, dx, dy, size, color));
+    }
+}
+
+function animate() {
+    // Use rgba with alpha < 1 for motion blur effect instead of full fillRect
+    ctx.fillStyle = 'rgba(0, 2, 26, 0.15)';
+    ctx.fillRect(0, 0, width, height);
+
+    for (let i = 0; i < particlesArray.length; i++) {
+        particlesArray[i].update();
+    }
+
+    requestAnimationFrame(animate);
+}
+
+window.addEventListener('resize', () => {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+    init();
+});
+
+init();
+animate();
+</script>
 </body>
 </html>
