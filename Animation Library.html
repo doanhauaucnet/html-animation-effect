@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,30 +12,39 @@
         /* Basic styling for the body and font */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #111827; /* A dark gray background */
+            background-color: #111827;
+            /* A dark gray background */
             color: #f3f4f6;
         }
+
         /* Style for the iframe to ensure it's contained and looks good */
         #animation-preview {
-            border: 1px solid #374151; /* A slightly lighter gray border */
-            border-radius: 0.75rem; /* Rounded corners */
+            border: 1px solid #374151;
+            /* A slightly lighter gray border */
+            border-radius: 0.75rem;
+            /* Rounded corners */
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
+
         /* Custom styles for the navigation buttons for a better look and feel */
         .nav-button {
             transition: all 0.2s ease-in-out;
         }
+
         .nav-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
+
         .nav-button.active {
-            background-color: #3b82f6; /* Blue-500 for active state */
+            background-color: #3b82f6;
+            /* Blue-500 for active state */
             color: white;
             font-weight: 600;
         }
     </style>
 </head>
+
 <body class="flex flex-col md:flex-row h-screen overflow-hidden">
 
     <!-- Sidebar Navigation -->
@@ -62,7 +72,6 @@
         // Make sure this library file is in the SAME folder as your animation files.
         const animationFiles = [
             "Anim/Abstract Elemental Flow.html",
-            "Anim/Abstract Magic Animation.html",
             "Anim/Bioluminescent Nebula.html",
             "Anim/Cybernetic Synapses Animation.html",
             "Anim/Flocking Boids.html",
@@ -74,6 +83,7 @@
             "Anim/Interactive Stardust Visualization.html",
             "Anim/Interactive Universe Animation.html",
             "Anim/Living Abyss Animation.html",
+            "Anim/Magic Brush.html",
             "Anim/Snow Sky.html",
             "Anim/Star Cloud And Comet.html",
             "Anim/Tokyo Metro Particle Simulation.html",
@@ -95,28 +105,24 @@
          */
         function createAnimationLink(fileName) {
             const button = document.createElement('button');
-            // Create a more readable name from the filename
-            const displayName = fileName.replace('.html', '').replace(/([A-Z])/g, ' $1').trim();
-            
+            // Remove any prefix before the last '/' and '.html' suffix
+            const displayName = fileName.replace(/^.*\//, '').replace('.html', '').replace(/([A-Z])/g, ' $1').trim();
+
             button.textContent = displayName;
             button.dataset.src = fileName; // Store the filename in a data attribute
             button.className = 'nav-button w-full text-left bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg';
-            
-            // Add a click event listener to load the animation
+
             button.addEventListener('click', () => {
-                // Set the iframe source to the file's name
                 previewFrame.src = fileName;
-                
-                // Update active button styling
-                if (currentButton) {
-                    currentButton.classList.remove('active');
-                }
+
+                if (currentButton) currentButton.classList.remove('active');
                 button.classList.add('active');
                 currentButton = button;
             });
 
             animationList.appendChild(button);
         }
+
 
         // --- Initialization ---
 
@@ -135,4 +141,5 @@
     </script>
 
 </body>
+
 </html>
