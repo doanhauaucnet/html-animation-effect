@@ -1,264 +1,182 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cosmic Nebula Animation</title>
-    <style>
-        /* Basic CSS reset to remove default margins and paddings */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            /* Set a black background and hide any potential scrollbars */
-            background-color: #000;
-            overflow: hidden;
-            font-family: 'Inter', sans-serif;
-        }
-
-        canvas {
-            /* Ensure the canvas is treated as a block element */
-            display: block;
-        }
-        
-    </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cosmic Nebula Animation</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        background-color: #000;
+        overflow: hidden;
+        font-family: 'Inter', sans-serif;
+    }
+    canvas { display: block; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap" rel="stylesheet">
 </head>
 <body>
-    <canvas id="cosmicCanvas"></canvas>
+<canvas id="cosmicCanvas"></canvas>
 
-    <script>
-        // --- Canvas and Context Setup ---
-        const canvas = document.getElementById('cosmicCanvas');
-        const ctx = canvas.getContext('2d');
+<script>
+const canvas = document.getElementById('cosmicCanvas');
+const ctx = canvas.getContext('2d');
 
-        // Set initial canvas dimensions
-        let width = canvas.width = window.innerWidth;
-        let height = canvas.height = window.innerHeight;
+let width = canvas.width = window.innerWidth;
+let height = canvas.height = window.innerHeight;
 
-        // --- Global Animation Variables ---
-        let particles = [];
-        const particleCount = 1000; // Number of particles
-        let hue = 0; // Starting hue for the color cycle
-        
-        // Attractor object to represent the mouse or center point
-        const attractor = {
-            x: width / 2,
-            y: height / 2,
-            radius: 100, // The radius where the gravitational pull is strongest
-        };
-        
-        const instructions = document.getElementById('instructions');
-        let instructionTimeout;
+let particles = [];
+const particleCount = 1000;
+let hue = 0;
 
-        // Shockwave effect variables
-        const shockwave = {
-            active: false,
-            x: 0,
-            y: 0,
-            radius: 0,
-            maxRadius: 500, // Max size of the shockwave
-            force: 0.4, // Strength of the push
-            speed: 5, // How fast the shockwave expands
-        };
+const attractor = { x: width / 2, y: height / 2, radius: 100 };
 
-        // --- Utility Functions ---
-        
-        /**
-         * Generates a random number within a specified range.
-         * @param {number} min - The minimum value.
-         * @param {number} max - The maximum value.
-         * @returns {number} A random number between min and max.
-         */
-        function random(min, max) {
-            return Math.random() * (max - min) + min;
+const shockwave = { active: false, x: 0, y: 0, radius: 0, maxRadius: 500, force: 0.4, speed: 5 };
+
+// Mini black holes array
+let blackHoles = [];
+
+function random(min, max) { return Math.random() * (max - min) + min; }
+function distance(x1, y1, x2, y2) {
+    const dx = x1 - x2, dy = y1 - y2;
+    return Math.sqrt(dx*dx + dy*dy);
+}
+
+class Particle {
+    constructor(x, y) {
+        this.x = x || random(0, width);
+        this.y = y || random(0, height);
+        this.vx = random(-1, 1);
+        this.vy = random(-1, 1);
+        this.size = random(1, 3);
+        this.life = random(100, 200);
+        this.initialLife = this.life;
+    }
+
+    update() {
+        // Attractor pull
+        const distToAttractor = distance(this.x, this.y, attractor.x, attractor.y);
+        const angleToAttractor = Math.atan2(attractor.y - this.y, attractor.x - this.x);
+        const forceAttractor = (attractor.radius - distToAttractor) / attractor.radius * 0.1;
+        if (distToAttractor < attractor.radius) {
+            this.vx += Math.cos(angleToAttractor) * forceAttractor;
+            this.vy += Math.sin(angleToAttractor) * forceAttractor;
         }
 
-        /**
-         * Calculates the distance between two points.
-         * @param {number} x1 - X-coordinate of the first point.
-         * @param {number} y1 - Y-coordinate of the second point.
-         * @param {number} x2 - X-coordinate of the second point.
-         * @param {number} y2 - Y-coordinate of the second point.
-         * @returns {number} The distance between the two points.
-         */
-        function distance(x1, y1, x2, y2) {
-            const dx = x1 - x2;
-            const dy = y1 - y2;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
-
-        // --- Particle Class ---
-        class Particle {
-            constructor(x, y) {
-                this.x = x || random(0, width);
-                this.y = y || random(0, height);
-                this.vx = random(-1, 1); // Velocity x
-                this.vy = random(-1, 1); // Velocity y
-                this.size = random(1, 3);
-                this.life = random(100, 200); // Lifespan of the particle
-                this.initialLife = this.life;
-            }
-
-            // Update particle position and velocity
-            update() {
-                // Gravitational pull towards the attractor
-                const distToAttractor = distance(this.x, this.y, attractor.x, attractor.y);
-                const angleToAttractor = Math.atan2(attractor.y - this.y, attractor.x - this.x);
-                const forceAttractor = (attractor.radius - distToAttractor) / attractor.radius * 0.1;
-
-                if (distToAttractor < attractor.radius) {
-                    this.vx += Math.cos(angleToAttractor) * forceAttractor;
-                    this.vy += Math.sin(angleToAttractor) * forceAttractor;
-                }
-
-                // Shockwave effect logic
-                if (shockwave.active) {
-                    const distToShockwave = distance(this.x, this.y, shockwave.x, shockwave.y);
-                    const angleToShockwave = Math.atan2(this.y - shockwave.y, this.x - shockwave.x);
-
-                    if (distToShockwave < shockwave.radius) {
-                        // The closer the particle is to the center of the shockwave, the stronger the push
-                        const shockForce = shockwave.force * (1 - distToShockwave / shockwave.radius);
-                        this.vx += Math.cos(angleToShockwave) * shockForce;
-                        this.vy += Math.sin(angleToShockwave) * shockForce;
-                    }
-                }
-
-                // Apply friction to slow down particles over time
-                this.vx *= 0.97;
-                this.vy *= 0.97;
-
-                // Update position based on velocity
-                this.x += this.vx;
-                this.y += this.vy;
-
-                // Decrease life
-                this.life--;
-
-                // Reset particle if it's "dead" or off-screen
-                if (
-                    this.life <= 0 ||
-                    this.x < -this.size ||
-                    this.x > width + this.size ||
-                    this.y < -this.size ||
-                    this.y > height + this.size
-                ) {
-                    this.reset();
-                }
-            }
-
-            // Draw the particle on the canvas
-            draw() {
-                // Calculate opacity based on lifespan for a fade-in/fade-out effect
-                const opacity = 1 - (this.life / this.initialLife);
-                
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                // Use HSL for vibrant, cycling colors. Brightness is linked to velocity.
-                const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-                const lightness = 50 + Math.min(speed * 10, 50);
-                ctx.fillStyle = `hsla(${hue + (this.x + this.y) / 10}, 100%, ${lightness}%, ${opacity})`;
-                ctx.fill();
-            }
-            
-            // Reset particle to a new random state
-            reset() {
-                this.x = random(0, width);
-                this.y = random(0, height);
-                this.vx = random(-1, 1);
-                this.vy = random(-1, 1);
-                this.life = random(100, 200);
-                this.initialLife = this.life;
+        // Shockwave
+        if (shockwave.active) {
+            const distToShockwave = distance(this.x, this.y, shockwave.x, shockwave.y);
+            const angleToShockwave = Math.atan2(this.y - shockwave.y, this.x - shockwave.x);
+            if (distToShockwave < shockwave.radius) {
+                const shockForce = shockwave.force * (1 - distToShockwave / shockwave.radius);
+                this.vx += Math.cos(angleToShockwave) * shockForce;
+                this.vy += Math.sin(angleToShockwave) * shockForce;
             }
         }
 
-        // --- Initialization ---
-        function init() {
-            particles = [];
-            for (let i = 0; i < particleCount; i++) {
-                particles.push(new Particle());
+        // Black holes pull
+        blackHoles.forEach(hole => {
+            const distToHole = distance(this.x, this.y, hole.x, hole.y);
+            if (distToHole < hole.radius) {
+                const angle = Math.atan2(hole.y - this.y, hole.x - this.x);
+                const force = (hole.radius - distToHole)/hole.radius * 0.5;
+                this.vx += Math.cos(angle) * force;
+                this.vy += Math.sin(angle) * force;
             }
-        }
-
-        // --- Animation Loop ---
-        function animate() {
-            // Fill the canvas with a semi-transparent black.
-            // This creates the trailing/blur effect.
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-            ctx.fillRect(0, 0, width, height);
-
-            // Update and draw each particle
-            particles.forEach(p => {
-                p.update();
-                p.draw();
-            });
-
-            // Update shockwave if active
-            if (shockwave.active) {
-                shockwave.radius += shockwave.speed;
-                if (shockwave.radius > shockwave.maxRadius) {
-                    shockwave.active = false;
-                    shockwave.radius = 0; // Reset for the next click
-                }
-            }
-
-            // Increment the hue to cycle through colors
-            hue++;
-
-            // Request the next frame
-            requestAnimationFrame(animate);
-        }
-
-        // --- Event Listeners ---
-
-        // Handle window resizing
-        window.addEventListener('resize', () => {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-            attractor.x = width / 2;
-            attractor.y = height / 2;
-            init(); // Re-initialize particles to fit new screen size
         });
 
-        // Track mouse movement to update the attractor's position
-        window.addEventListener('mousemove', (e) => {
-            attractor.x = e.clientX;
-            attractor.y = e.clientY;
-            
-            // Hide instructions after first interaction
-            instructions.style.opacity = '0';
-            if (instructionTimeout) clearTimeout(instructionTimeout);
-        });
-        
-        // Reset attractor to center when mouse leaves the window
-        window.addEventListener('mouseleave', () => {
-            attractor.x = width / 2;
-            attractor.y = height / 2;
-        });
-        
-        // On click, create a shockwave at the mouse position
-        window.addEventListener('click', (e) => {
-            shockwave.active = true;
-            shockwave.x = e.clientX;
-            shockwave.y = e.clientY;
-            shockwave.radius = 0; // Start the shockwave from radius 0
-        });
+        this.vx *= 0.97;
+        this.vy *= 0.97;
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
 
+        if (this.life <= 0 || this.x < -this.size || this.x > width + this.size || this.y < -this.size || this.y > height + this.size) {
+            this.reset();
+        }
+    }
 
-        // --- Start the animation ---
-        init();
-        animate();
-        
-        // Fade out instructions after a few seconds if there's no interaction
-        instructionTimeout = setTimeout(() => {
-            instructions.style.opacity = '0';
-        }, 5000);
-    </script>
+    draw() {
+        const opacity = 1 - (this.life / this.initialLife);
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        const speed = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
+        const lightness = 50 + Math.min(speed*10, 50);
+        ctx.fillStyle = `hsla(${hue + (this.x + this.y)/10}, 100%, ${lightness}%, ${opacity})`;
+        ctx.fill();
+    }
+
+    reset() {
+        this.x = random(0, width);
+        this.y = random(0, height);
+        this.vx = random(-1, 1);
+        this.vy = random(-1, 1);
+        this.life = random(100, 200);
+        this.initialLife = this.life;
+    }
+}
+
+function init() {
+    particles = [];
+    for(let i=0;i<particleCount;i++) particles.push(new Particle());
+}
+
+function animate() {
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillRect(0,0,width,height);
+
+    particles.forEach(p => { p.update(); p.draw(); });
+
+    if(shockwave.active) {
+        shockwave.radius += shockwave.speed;
+        if(shockwave.radius > shockwave.maxRadius) { shockwave.active = false; shockwave.radius = 0; }
+    }
+
+    // Update black holes life
+    blackHoles = blackHoles.filter(h => {
+        h.life--;
+        return h.life > 0;
+    });
+
+    hue++;
+    requestAnimationFrame(animate);
+}
+
+window.addEventListener('resize', () => {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+    attractor.x = width / 2;
+    attractor.y = height / 2;
+    init();
+});
+
+window.addEventListener('mousemove', (e) => {
+    attractor.x = e.clientX;
+    attractor.y = e.clientY;
+});
+
+window.addEventListener('mouseleave', () => {
+    attractor.x = width / 2;
+    attractor.y = height / 2;
+});
+
+window.addEventListener('click', (e) => {
+    shockwave.active = true;
+    shockwave.x = e.clientX;
+    shockwave.y = e.clientY;
+    shockwave.radius = 0;
+});
+
+// --- Mini Black Hole on Right Click ---
+window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    blackHoles.push({ x: e.clientX, y: e.clientY, radius: 200, life: 120 });
+});
+
+init();
+animate();
+</script>
 </body>
 </html>
