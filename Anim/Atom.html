@@ -86,27 +86,6 @@
         const nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial);
         scene.add(nucleus);
 
-        const starGeometry = new THREE.BufferGeometry();
-        const starVertices = [];
-        for (let i = 0; i < 10000; i++) {
-          const x = (Math.random() - 0.5) * 2000;
-          const y = (Math.random() - 0.5) * 2000;
-          const z = (Math.random() - 0.5) * 2000;
-          if (x * x + y * y + z * z < 100000) continue;
-          starVertices.push(x, y, z);
-        }
-        starGeometry.setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute(starVertices, 3)
-        );
-        const starMaterial = new THREE.PointsMaterial({
-          color: 0xaaaaaa,
-          size: 0.7,
-          transparent: true,
-          opacity: 0.5,
-        });
-        scene.add(new THREE.Points(starGeometry, starMaterial));
-
         const electronCount = 8;
         const electronMaterial = new THREE.MeshBasicMaterial({
           color: 0x55bbff,
