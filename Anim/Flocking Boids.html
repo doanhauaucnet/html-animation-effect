@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+<<<<<<< Updated upstream
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -78,10 +79,165 @@
                 lifespan: 20 + Math.random() * 10,
                 hue: 170 + Math.random() * 80,
               });
+=======
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Flocking Boids — Fixed Shockwave</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400&display=swap" rel="stylesheet">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: #0c0a18;
+            color: #fff;
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="boids-canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('boids-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = 0, height = 0;
+        let deviceRatio = window.devicePixelRatio || 1;
+
+        const flock = [];
+        const groups = [];
+        const predators = [];
+        const particleEffects = [];
+        const mouse = { x: null, y: null, radius: 100 };
+        let initialBoidCount = 0;
+
+        // ---------- ParticleEffect (fixed progress/age & move radius update to update()) ----------
+        class ParticleEffect {
+            constructor(x, y, type) {
+                this.position = { x, y };
+                this.type = type;
+                this.particles = [];
+
+                if (this.type === 'spawn') {
+                    this.totalLifespan = 40;
+                    this.age = 0;
+                    this.maxRadius = 70;
+                } else if (this.type === 'despawn') {
+                    this.totalLifespan = 40;
+                    this.age = 0;
+                    this.minRadius = 1;
+                    this.radius = 70;
+                } else if (this.type === 'eaten') {
+                    for (let i = 0; i < 10; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = 1 + Math.random() * 2;
+                        this.particles.push({
+                            x: this.position.x,
+                            y: this.position.y,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed,
+                            lifespan: 20 + Math.random() * 10,
+                            hue: 170 + Math.random() * 80
+                        });
+                    }
+                } else if (this.type === 'shockwave') {
+                    this.totalLifespan = 80;
+                    this.age = 0;
+                    this.maxRadius = 400;
+                    this.radius = 0;
+                    this.expansionSpeed = this.maxRadius / this.totalLifespan; // px per frame
+                    this.ringThickness = 10; // how "thin" the ring detection is
+                } else if (this.type === 'freeze') {
+                    this.totalLifespan = 200;
+                    this.age = 0;
+                    this.radius = 150;
+                }
+            }
+
+            update() {
+                if (this.type === 'eaten') {
+                    for (let i = this.particles.length - 1; i >= 0; i--) {
+                        const p = this.particles[i];
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.lifespan--;
+                        if (p.lifespan <= 0) this.particles.splice(i, 1);
+                    }
+                } else {
+                    // Common age/lifespan handling
+                    this.age++;
+                    // For shockwave, advance radius according to age
+                    if (this.type === 'shockwave') {
+                        this.radius = this.expansionSpeed * this.age;
+                    }
+                    // For spawn/despawn we don't need extra per-frame physics beyond age
+                }
+            }
+
+            isFinished() {
+                if (this.type === 'eaten') return this.particles.length === 0;
+                return this.age >= (this.totalLifespan || 0);
+            }
+
+            draw() {
+                // Use age / totalLifespan to compute progress (0..1)
+                const total = this.totalLifespan || 40;
+                const progress = Math.min(1, (this.age || 0) / total);
+
+                if (this.type === 'spawn') {
+                    const currentRadius = this.maxRadius * (1 - progress);
+                    ctx.lineWidth = 3 * (1 - progress);
+                    ctx.strokeStyle = `rgba(255,80,80,${1 - progress})`;
+                    ctx.beginPath();
+                    ctx.arc(this.position.x, this.position.y, currentRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                } else if (this.type === 'despawn') {
+                    const currentRadius = this.minRadius + (this.radius - this.minRadius) * progress;
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = `rgba(255,80,80,${1 - progress})`;
+                    ctx.beginPath();
+                    ctx.arc(this.position.x, this.position.y, currentRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                } else if (this.type === 'eaten') {
+                    for (const p of this.particles) {
+                        const opacity = Math.max(0, p.lifespan / 30);
+                        ctx.fillStyle = `hsla(${p.hue},100%,70%,${opacity})`;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else if (this.type === 'freeze') {
+                    const alpha = 1 - progress;
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = `rgba(100,200,255,${alpha * 0.9})`;
+                    ctx.beginPath();
+                    ctx.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                } else if (this.type === 'shockwave') {
+                    // shockwave radius is updated in update() so it is in sync with age
+                    const alpha = 1 - progress; // visible immediately, fades out
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = `rgba(100,200,255,${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+>>>>>>> Stashed changes
             }
           }
         }
 
+<<<<<<< Updated upstream
         update() {
           if (this.type === "eaten") {
             for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -92,12 +248,208 @@
               if (p.lifespan <= 0) {
                 this.particles.splice(i, 1);
               }
+=======
+        // ---------- Boid, Predator, GroupLeader (minor fixes & optimizations) ----------
+        class Boid {
+            constructor(x, y, groupId, groupHue) {
+                this.position = { x: x ?? Math.random() * width, y: y ?? Math.random() * height };
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 2;
+                this.velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
+                this.acceleration = { x: 0, y: 0 };
+                this.maxForce = 0.05;
+                this.maxSpeed = 4;
+                this.perceptionRadius = 50;
+                this.groupId = groupId;
+                this.hue = groupHue + (Math.random() - 0.5) * 20;
+                this.frozenUntil = 0;
+            }
+
+            _calculateSteeringForce(desired) {
+                let steering = { x: desired.x - this.velocity.x, y: desired.y - this.velocity.y };
+                const forceMag = Math.hypot(steering.x, steering.y);
+                if (forceMag > this.maxForce) {
+                    steering.x = (steering.x / forceMag) * this.maxForce;
+                    steering.y = (steering.y / forceMag) * this.maxForce;
+                }
+                return steering;
+            }
+
+            seek(target) {
+                let desired = { x: target.x - this.position.x, y: target.y - this.position.y };
+                const mag = Math.hypot(desired.x, desired.y) || 1;
+                desired.x = (desired.x / mag) * this.maxSpeed;
+                desired.y = (desired.y / mag) * this.maxSpeed;
+                return this._calculateSteeringForce(desired);
+            }
+
+            flee(target) {
+                const fleeRadius = (target instanceof Predator) ? this.perceptionRadius * 2.5 : mouse.radius;
+                const dx = this.position.x - target.x;
+                const dy = this.position.y - target.y;
+                const d = Math.hypot(dx, dy);
+                if (d < fleeRadius && d > 0.0001) {
+                    let desired = { x: dx, y: dy };
+                    const mag = Math.hypot(desired.x, desired.y);
+                    desired.x = (desired.x / mag) * this.maxSpeed;
+                    desired.y = (desired.y / mag) * this.maxSpeed;
+                    return this._calculateSteeringForce(desired);
+                }
+                return { x: 0, y: 0 };
+            }
+
+            align(groupMates) {
+                let steering = { x: 0, y: 0 }, total = 0;
+                for (let other of groupMates) {
+                    if (other === this) continue;
+                    const d = Math.hypot(this.position.x - other.position.x, this.position.y - other.position.y);
+                    if (d < this.perceptionRadius) {
+                        steering.x += other.velocity.x;
+                        steering.y += other.velocity.y;
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.x /= total; steering.y /= total;
+                    const mag = Math.hypot(steering.x, steering.y) || 1;
+                    steering.x = (steering.x / mag) * this.maxSpeed;
+                    steering.y = (steering.y / mag) * this.maxSpeed;
+                    return this._calculateSteeringForce(steering);
+                }
+                return { x: 0, y: 0 };
+            }
+
+            cohesion(groupMates) {
+                let steering = { x: 0, y: 0 }, total = 0;
+                for (let other of groupMates) {
+                    if (other === this) continue;
+                    const d = Math.hypot(this.position.x - other.position.x, this.position.y - other.position.y);
+                    if (d < this.perceptionRadius) {
+                        steering.x += other.position.x;
+                        steering.y += other.position.y;
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.x /= total; steering.y /= total;
+                    let desired = { x: steering.x - this.position.x, y: steering.y - this.position.y };
+                    const mag = Math.hypot(desired.x, desired.y) || 1;
+                    desired.x = (desired.x / mag) * this.maxSpeed;
+                    desired.y = (desired.y / mag) * this.maxSpeed;
+                    return this._calculateSteeringForce(desired);
+                }
+                return { x: 0, y: 0 };
+            }
+
+            separation(groupMates) {
+                let steering = { x: 0, y: 0 }, total = 0;
+                for (let other of groupMates) {
+                    if (other === this) continue;
+                    const d = Math.hypot(this.position.x - other.position.x, this.position.y - other.position.y);
+                    if (d < this.perceptionRadius / 1.5 && d > 0.0001) {
+                        let diffX = (this.position.x - other.position.x) / (d * d);
+                        let diffY = (this.position.y - other.position.y) / (d * d);
+                        steering.x += diffX; steering.y += diffY;
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.x /= total; steering.y /= total;
+                    const mag = Math.hypot(steering.x, steering.y) || 1;
+                    steering.x = (steering.x / mag) * this.maxSpeed;
+                    steering.y = (steering.y / mag) * this.maxSpeed;
+                    return this._calculateSteeringForce(steering);
+                }
+                return { x: 0, y: 0 };
+            }
+
+            flock(groupMates, groupLeader, predators) {
+                const alignment = this.align(groupMates);
+                const cohesion = this.cohesion(groupMates);
+                const separation = this.separation(groupMates);
+                const leaderFollow = this.seek(groupLeader.position);
+
+                this.acceleration.x += separation.x * 1.5;
+                this.acceleration.y += separation.y * 1.5;
+                this.acceleration.x += alignment.x * 1.0;
+                this.acceleration.y += alignment.y * 1.0;
+                this.acceleration.x += cohesion.x * 1.0;
+                this.acceleration.y += cohesion.y * 1.0;
+                this.acceleration.x += leaderFollow.x * 0.5;
+                this.acceleration.y += leaderFollow.y * 0.5;
+
+                for (const predator of predators) {
+                    const flee = this.flee(predator.position);
+                    this.acceleration.x += flee.x * 3.0;
+                    this.acceleration.y += flee.y * 3.0;
+                }
+
+                if (mouse.x !== null) {
+                    const repel = this.flee(mouse);
+                    this.acceleration.x += repel.x * 2.0;
+                    this.acceleration.y += repel.y * 2.0;
+                }
+            }
+
+            edges() {
+                if (this.position.x > width + 10) this.position.x = -10;
+                else if (this.position.x < -10) this.position.x = width + 10;
+                if (this.position.y > height + 10) this.position.y = -10;
+                else if (this.position.y < -10) this.position.y = height + 10;
+            }
+
+            update() {
+                // Apply acceleration to velocity first (fixed order)
+                this.velocity.x += this.acceleration.x;
+                this.velocity.y += this.acceleration.y;
+
+                const mag = Math.hypot(this.velocity.x, this.velocity.y) || 1;
+                if (mag > this.maxSpeed) {
+                    this.velocity.x = (this.velocity.x / mag) * this.maxSpeed;
+                    this.velocity.y = (this.velocity.y / mag) * this.maxSpeed;
+                }
+
+                this.position.x += this.velocity.x;
+                this.position.y += this.velocity.y;
+
+                // reset acceleration
+                this.acceleration.x = 0;
+                this.acceleration.y = 0;
+            }
+
+            draw() {
+                const angle = Math.atan2(this.velocity.y, this.velocity.x);
+                ctx.save();
+                ctx.translate(this.position.x, this.position.y);
+                ctx.rotate(angle);
+                ctx.beginPath();
+                ctx.moveTo(10, 0);
+                ctx.lineTo(-5, -5);
+                ctx.lineTo(-5, 5);
+                ctx.closePath();
+
+                const speed = Math.hypot(this.velocity.x, this.velocity.y) || 0;
+                const lightness = 60 + (speed / this.maxSpeed) * 20;
+
+                if (this.frozenUntil > Date.now()) {
+                    ctx.fillStyle = "white";
+                    ctx.shadowColor = "white";
+                    ctx.shadowBlur = 6;
+                } else {
+                    ctx.fillStyle = `hsl(${this.hue},100%,${lightness}%)`;
+                    ctx.shadowColor = `hsl(${this.hue},100%,60%)`;
+                    ctx.shadowBlur = 8;
+                }
+                ctx.fill();
+                ctx.restore();
+>>>>>>> Stashed changes
             }
           } else {
             this.lifespan--;
           }
         }
 
+<<<<<<< Updated upstream
         isFinished() {
           return (
             (this.type === "eaten" && this.particles.length === 0) ||
@@ -613,3 +965,215 @@
     </script>
   </body>
 </html>
+=======
+        class Predator extends Boid {
+            constructor(x, y) {
+                super(x, y);
+                this.maxSpeed = 5;
+                this.maxForce = 0.1;
+                this.hue = 0;
+                this.perceptionRadius = 200;
+            }
+            seek(boids) {
+                let closest = null, closestDist = Infinity;
+                for (let boid of boids) {
+                    const d = Math.hypot(this.position.x - boid.position.x, this.position.y - boid.position.y);
+                    if (d < closestDist && d < this.perceptionRadius) {
+                        closestDist = d; closest = boid;
+                    }
+                }
+                if (closest) {
+                    let desired = { x: closest.position.x - this.position.x, y: closest.position.y - this.position.y };
+                    const mag = Math.hypot(desired.x, desired.y) || 1;
+                    desired.x = (desired.x / mag) * this.maxSpeed;
+                    desired.y = (desired.y / mag) * this.maxSpeed;
+                    const steering = this._calculateSteeringForce(desired);
+                    this.acceleration.x += steering.x; this.acceleration.y += steering.y;
+                }
+            }
+            draw() {
+                const angle = Math.atan2(this.velocity.y, this.velocity.x);
+                ctx.save();
+                ctx.translate(this.position.x, this.position.y);
+                ctx.rotate(angle);
+                ctx.beginPath();
+                ctx.moveTo(15, 0);
+                ctx.lineTo(-7, -7);
+                ctx.lineTo(-7, 7);
+                ctx.closePath();
+                ctx.fillStyle = `hsl(${this.hue},100%,65%)`;
+                ctx.shadowColor = `hsl(${this.hue},100%,65%)`;
+                ctx.shadowBlur = 12;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class GroupLeader {
+            constructor() {
+                this.position = { x: Math.random() * width, y: Math.random() * height };
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 1;
+                this.velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
+            }
+            update() {
+                this.position.x += this.velocity.x;
+                this.position.y += this.velocity.y;
+                if (Math.random() < 0.05) {
+                    const angle = Math.random() * Math.PI * 2;
+                    this.velocity.x = Math.cos(angle) * (1 + Math.random() * 1);
+                    this.velocity.y = Math.sin(angle) * (1 + Math.random() * 1);
+                }
+                if (this.position.x > width) this.position.x = 0;
+                else if (this.position.x < 0) this.position.x = width;
+                if (this.position.y > height) this.position.y = 0;
+                else if (this.position.y < 0) this.position.y = height;
+            }
+        }
+
+        // ---------- Setup & Animation ----------
+        function setupCanvasSize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            deviceRatio = window.devicePixelRatio || 1;
+
+            // Set canvas CSS size and backing store size for crispness
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            canvas.width = Math.floor(width * deviceRatio);
+            canvas.height = Math.floor(height * deviceRatio);
+
+            // Reset transforms and scale so drawing coordinates are in CSS pixels
+            ctx.setTransform(deviceRatio, 0, 0, deviceRatio, 0, 0);
+        }
+
+        function setup() {
+            setupCanvasSize();
+
+            flock.length = 0;
+            predators.length = 0;
+            particleEffects.length = 0;
+            groups.length = 0;
+
+            initialBoidCount = Math.floor((width * height) / 8000);
+            const numGroups = Math.max(2, Math.floor(initialBoidCount / 40));
+            const baseHues = [180, 240, 280, 200, 300];
+
+            for (let i = 0; i < numGroups; i++) {
+                groups.push({ id: i, hue: baseHues[i % baseHues.length], leader: new GroupLeader() });
+            }
+            for (let i = 0; i < initialBoidCount; i++) {
+                const group = groups[i % numGroups];
+                flock.push(new Boid(null, null, group.id, group.hue));
+            }
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(12,10,24,0.12)';
+            ctx.fillRect(0, 0, width, height);
+
+            for (let i = particleEffects.length - 1; i >= 0; i--) {
+                const eff = particleEffects[i];
+                eff.update();
+                eff.draw();
+                if (eff.isFinished()) particleEffects.splice(i, 1);
+            }
+
+            groups.forEach(g => g.leader.update());
+
+            const groupMap = {};
+            for (const b of flock) {
+                if (!groupMap[b.groupId]) groupMap[b.groupId] = [];
+                groupMap[b.groupId].push(b);
+            }
+
+            // Collect active shockwaves for potential freeze effects (small array)
+            const activeShockwaves = particleEffects.filter(p => p.type === 'shockwave');
+
+            // Update & draw boids
+            for (let i = flock.length - 1; i >= 0; i--) {
+                const boid = flock[i];
+                let isFrozen = boid.frozenUntil > Date.now();
+
+                // Check shockwaves (small K), freeze when ring hits boid (use ringThickness)
+                for (const sw of activeShockwaves) {
+                    const dx = boid.position.x - sw.position.x;
+                    const dy = boid.position.y - sw.position.y;
+                    const dist = Math.hypot(dx, dy);
+                    // ring detection: when distance is within [radius - thickness, radius + thickness]
+                    if (Math.abs(dist - sw.radius) <= (sw.ringThickness || 10)) {
+                        if (isFrozen) {
+                            boid.frozenUntil = 0;
+                            isFrozen = false;
+                        } else {
+                            boid.frozenUntil = Date.now() + 3000; // freeze 3s
+                            isFrozen = true;
+                        }
+                    }
+                }
+
+                if (!isFrozen) {
+                    const groupMates = groupMap[boid.groupId] || [];
+                    const groupLeader = groups[boid.groupId].leader;
+                    boid.edges();
+                    boid.flock(groupMates, groupLeader, predators);
+                    boid.update();
+                }
+
+                boid.draw();
+            }
+
+            // Predators (update, eat)
+            for (let i = predators.length - 1; i >= 0; i--) {
+                const predator = predators[i];
+                predator.edges();
+                predator.seek(flock);
+                predator.update();
+                predator.draw();
+
+                for (let j = flock.length - 1; j >= 0; j--) {
+                    const b = flock[j];
+                    const d = Math.hypot(predator.position.x - b.position.x, predator.position.y - b.position.y);
+                    if (d < 10) {
+                        particleEffects.push(new ParticleEffect(b.position.x, b.position.y, 'eaten'));
+                        flock.splice(j, 1);
+                    }
+                }
+            }
+
+            // Population control simplified
+            if (flock.length < initialBoidCount / 2 && Math.random() < 0.02) {
+                const group = groups[Math.floor(Math.random() * groups.length)];
+                flock.push(new Boid(null, null, group.id, group.hue));
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // ----- Input handlers -----
+        window.addEventListener('resize', () => {
+            setup();
+        });
+        canvas.addEventListener('click', e => {
+            if (predators.length >= 3) {
+                const oldest = predators.shift();
+                particleEffects.push(new ParticleEffect(oldest.position.x, oldest.position.y, 'despawn'));
+            }
+            predators.push(new Predator(e.clientX, e.clientY));
+            particleEffects.push(new ParticleEffect(e.clientX, e.clientY, 'spawn'));
+        });
+        canvas.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            particleEffects.push(new ParticleEffect(e.clientX, e.clientY, 'shockwave'));
+        });
+        window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        window.addEventListener('mouseleave', () => { mouse.x = null; mouse.y = null; });
+
+        // init
+        setup();
+        requestAnimationFrame(animate);
+    </script>
+</body>
+
+</html>
+>>>>>>> Stashed changes
