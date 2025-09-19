@@ -90,15 +90,18 @@
         const electronMaterial = new THREE.MeshBasicMaterial({
           color: 0x55bbff,
         });
-        const trailMaterial = new THREE.PointsMaterial({
-          color: 0x55bbff,
-          size: 0.1,
-          transparent: true,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          opacity: 0.7,
-        });
+        const trailTexture = new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/circle.png');
 
+        const trailMaterial = new THREE.PointsMaterial({
+        color: 0x55bbff,
+        size: 0.1,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        opacity: 0.7,
+        map: trailTexture,
+        alphaTest: 0.01,
+        });
         const trailGeometry = new THREE.BufferGeometry();
         const trailPositions = new Float32Array(electronCount * 100 * 3);
         trailGeometry.setAttribute(
