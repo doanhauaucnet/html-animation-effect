@@ -72,13 +72,14 @@ class Particle {
         if (mouse.x !== null && mouse.y !== null) {
             const dx = mouse.x - this.x;
             const dy = mouse.y - this.y;
-            const distance = dx * dx + dy * dy; // Using squared distance (avoids sqrt)
-            const maxDist = mouse.radius * mouse.radius;
-            if (distance < maxDist) {
-                const force = (1 - distance / maxDist) * this.density;
-                const angle = Math.atan2(dy, dx);
-                this.x -= Math.cos(angle) * force;
-                this.y -= Math.sin(angle) * force;
+            const distanceSq = dx * dx + dy * dy; // squared distance
+            const maxDistSq = mouse.radius * mouse.radius;
+
+            if (distanceSq < maxDistSq) {
+                // Directly scale displacement without atan2
+                const forceFactor = (1 - distanceSq / maxDistSq) * this.density * 0.01; 
+                this.x -= dx * forceFactor;
+                this.y -= dy * forceFactor;
             }
         }
 
