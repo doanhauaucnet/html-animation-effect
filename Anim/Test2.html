@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Particle Field</title>
+    <style>
+        /* General body and canvas styling */
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #050510; /* Dark, deep space background */
+            font-family: 'Inter', sans-serif;
+            color: #fff;
+        }
+
+        /* Canvas will cover the entire screen */
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: block;
+            cursor: none; /* Hiding the cursor for a more immersive feel */
+        }
+
+        /* Container for the text overlay */
+        .overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none; /* Allows mouse events to pass through to the canvas */
+            z-index: 10;
+        }
+
+        .overlay h1 {
+            font-size: clamp(2rem, 5vw, 4rem);
+            font-weight: 700;
+            margin: 0;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+            letter-spacing: 2px;
+        }
+
+        .overlay p {
+            font-size: clamp(0.9rem, 1.5vw, 1.2rem);
+            margin-top: 10px;
+            font-weight: 300;
+            opacity: 0.8;
+            max-width: 80%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="galaxyCanvas"></canvas>
+
+    <div class="overlay">
+        <h1>Celestial Dance</h1>
+        <p>Move your cursor to interact with the particles.</p>
+    </div>
+
+    <script>
+        // Get the canvas and its 2D context
+        const canvas = document.getElementById('galaxyCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas dimensions to match the window
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Initialize particle and mouse objects
+        let particles = [];
+        let mouse = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 200 // The attraction radius for particles
+        };
+
+        // --- Particle Class ---
+        // A class to represent and manage each individual particle
+        class Particle {
+            constructor(x, y, radius, color) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.color = color;
+                // Give particles a random initial velocity
+                this.velocity = {
+                    x: (Math.random() - 0.5) * 2,
+                    y: (Math.random() - 0.5) * 2
+                };
+            }
+
+            // Method to draw the particle
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            // Method to update the particle's state and position
+            update() {
+                // Calculate distance from mouse for attraction
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+
+                // If the particle is within the mouse radius, apply a force
+                if (dist < mouse.radius) {
+                    let angle = Math.atan2(dy, dx);
+                    // The force is stronger closer to the mouse
+                    let force = (mouse.radius - dist) / mouse.radius;
+                    this.velocity.x += Math.cos(angle) * force * 0.8;
+                    this.velocity.y += Math.sin(angle) * force * 0.8;
+                }
+
+                // Apply a drag/friction to create a swirling effect
+                this.velocity.x *= 0.96;
+                this.velocity.y *= 0.96;
+
+                // Update particle position
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+
+                // Bounce particles off the edges of the canvas
+                if (this.x + this.radius > canvas.width || this.x - this.radius < 0) {
+                    this.velocity.x = -this.velocity.x;
+                }
+                if (this.y + this.radius > canvas.height || this.y - this.radius < 0) {
+                    this.velocity.y = -this.velocity.y;
+                }
+
+                // Draw the updated particle
+                this.draw();
+            }
+        }
+
+        // --- Initialization and Animation ---
+        let hue = 0;
+        
+        // Function to create a new set of particles
+        function init() {
+            particles = [];
+            const particleCount = 2500; // You can adjust this for performance vs density
+            
+            for (let i = 0; i < particleCount; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                const radius = Math.random() * 1.5 + 0.5; // Small, varied sizes
+                const color = `hsl(${hue}, 100%, 50%)`;
+                particles.push(new Particle(x, y, radius, color));
+            }
+        }
+
+        // The main animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // A semi-transparent overlay creates the beautiful trailing effect
+            ctx.fillStyle = 'rgba(5, 5, 16, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Cycle the hue for the color animation
+            hue = (hue + 0.5) % 360;
+
+            particles.forEach(particle => {
+                // Change the particle's color dynamically
+                particle.color = `hsl(${hue}, 100%, 50%)`;
+                particle.update();
+            });
+        }
+
+        // --- Event Listeners ---
+        // Update mouse position on move
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = event.clientX;
+            mouse.y = event.clientY;
+        });
+
+        // Handle window resizing to keep the canvas full-screen
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Re-initialize particles to fit the new dimensions
+            init();
+        });
+
+        // Start the visualization
+        init();
+        animate();
+    </script>
+</body>
+</html>
