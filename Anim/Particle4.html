@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mesmerizing Visualization — Interactive Particles</title>
+  <style>
+    :root{
+      --glass-bg: rgba(255,255,255,0.04);
+      --glass-border: rgba(255,255,255,0.06);
+      --accent: 255, 160, 60;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0;background:#05060b;overflow:hidden}
+    canvas#scene{position:fixed;inset:0;display:block;will-change:transform;}
+
+    /* Subtle animated backdrop glow */
+    body::before{
+      content:"";position:fixed;inset:-20% ;
+      background: radial-gradient(40% 40% at 10% 20%, rgba(40,18,56,0.08), transparent 10%),
+                  radial-gradient(35% 35% at 90% 80%, rgba(8,60,130,0.06), transparent 12%);
+      pointer-events:none;filter:blur(40px);z-index:0;
+      animation: drift 30s linear infinite;
+    }
+    @keyframes drift{from{transform:translate(0,0)}to{transform:translate(-6%,4%)}}
+
+    /* UI */
+    .ui{position:fixed;right:18px;top:18px;z-index:60;display:flex;flex-direction:column;gap:12px}
+    .panel{backdrop-filter: blur(6px);background:var(--glass-bg);border:1px solid var(--glass-border);padding:12px 14px;border-radius:12px;color:#eef2ff;min-width:220px;box-shadow:0 6px 30px rgba(2,6,23,0.6)}
+    .panel h1{font-size:14px;margin:0 0 8px 0;letter-spacing:0.6px}
+    .row{display:flex;align-items:center;gap:8px}
+    label{font-size:12px;opacity:0.9}
+    input[type=range]{width:calc(100% - 60px)}
+    .small{font-size:11px;opacity:0.85}
+    button, .btn{background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:10px;color:#fff;font-size:13px;cursor:pointer}
+    .row-between{display:flex;justify-content:space-between;align-items:center}
+
+    .hint{position:fixed;left:18px;bottom:18px;z-index:60;color:#dbe6ff;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);backdrop-filter:blur(6px);font-size:13px}
+
+    .credits{position:fixed;left:18px;top:18px;color:rgba(255,255,255,0.6);font-size:12px}
+    a.link{color:inherit;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,0.08)}
+
+    /* Responsive tweaks */
+    @media (max-width:720px){
+      .panel{min-width:180px;padding:10px}
+      .ui{right:12px;top:12px}
+      .hint{left:12px;bottom:12px}
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div class="ui">
+    <div class="panel" id="controls">
+      <h1>Mesmerize — interactive particles</h1>
+      <div class="row-between">
+        <div class="small">Particles: <span id="countLabel">700</span></div>
+        <div style="display:flex;gap:8px">
+          <button id="toggle" class="btn">Pause</button>
+          <button id="randomize" class="btn">Palette</button>
+        </div>
+      </div>
+      <div style="height:8px"></div>
+      <div class="row"><label class="small">Count</label><input id="count" type="range" min="100" max="2200" value="700"></div>
+      <div class="row"><label class="small">Size</label><input id="size" type="range" min="0.5" max="6" step="0.1" value="2"></div>
+      <div class="row"><label class="small">Speed</label><input id="speed" type="range" min="0" max="3" step="0.01" value="1"></div>
+      <div class="row"><label class="small">Trail</label><input id="trail" type="range" min="0.88" max="0.995" step="0.001" value="0.92"></div>
+      <div style="height:8px"></div>
+      <div class="small">Interaction: move mouse — <strong>push</strong>; click &amp; drag — <strong>pull</strong></div>
+    </div>
+  </div>
+
+  <div class="hint">Move mouse to push nearby particles. Click & drag to attract. Tip: reduce particle count on mobile.</div>
+  <div class="credits">Made with ❤️ — tweak the controls</div>
+
+  <script>
+  // Mesmerizing interactive particle field
+  (function(){
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d');
+    let DPR = Math.max(1, window.devicePixelRatio || 1);
+
+    // Controls
+    const elCount = document.getElementById('count');
+    const elSize = document.getElementById('size');
+    const elSpeed = document.getElementById('speed');
+    const elTrail = document.getElementById('trail');
+    const countLabel = document.getElementById('countLabel');
+    const toggleBtn = document.getElementById('toggle');
+    const randomizeBtn = document.getElementById('randomize');
+
+    let W=0,H=0;
+    function resize(){
+      DPR = Math.max(1, window.devicePixelRatio || 1);
+      W = Math.floor(window.innerWidth);
+      H = Math.floor(window.innerHeight);
+      canvas.width = Math.floor(W*DPR);
+      canvas.height = Math.floor(H*DPR);
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Particle data
+    let particles = [];
+    let running = true;
+
+    // Palette helpers
+    let baseHue = Math.random()*360;
+    let hueSpread = 45 + Math.random()*140;
+    function randomizePalette(){ baseHue = Math.random()*360; hueSpread = 40 + Math.random()*160; }
+
+    // Create particle
+    function createParticle(i){
+      const x = Math.random()*W;
+      const y = Math.random()*H;
+      const angle = Math.random()*Math.PI*2;
+      const speed = (0.2 + Math.random()*1.8) * +elSpeed.value;
+      const size = (0.6 + Math.random()*1.8) * +elSize.value;
+      const hue = (baseHue + (Math.random()-0.5)*hueSpread + i*0.02) % 360;
+      return {x,y,vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed, size, hue, life: Math.random()*1000};
+    }
+
+    function initParticles(n){
+      particles = new Array(n);
+      for(let i=0;i<n;i++) particles[i] = createParticle(i);
+    }
+
+    // Interaction state
+    const mouse = {x: W/2, y: H/2, px:null, py:null, down:false, moved:false};
+    function updatePointer(e){
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = (e.clientX - rect.left);
+      mouse.y = (e.clientY - rect.top);
+      mouse.moved = true;
+    }
+    window.addEventListener('pointermove', (e)=>{updatePointer(e); mouse.px = e.movementX; mouse.py = e.movementY;});
+    window.addEventListener('pointerdown', ()=>{mouse.down = true});
+    window.addEventListener('pointerup', ()=>{mouse.down = false});
+    window.addEventListener('pointerleave', ()=>{mouse.moved=false});
+
+    // UI events
+    elCount.addEventListener('input', ()=>{
+      const n = Math.round(+elCount.value);
+      countLabel.textContent = n;
+      const old = particles.length;
+      if(n>old){
+        for(let i=old;i<n;i++) particles.push(createParticle(i));
+      } else if(n<old){
+        particles.length = n;
+      }
+    });
+    elSize.addEventListener('input', ()=>{});
+    elSpeed.addEventListener('input', ()=>{});
+    elTrail.addEventListener('input', ()=>{});
+    toggleBtn.addEventListener('click', ()=>{running = !running; toggleBtn.textContent = running? 'Pause':'Play'; if(running) requestAnimationFrame(loop);});
+    randomizeBtn.addEventListener('click', ()=>{randomizePalette();});
+
+    // Init
+    initParticles(+elCount.value);
+
+    // Utility: limit
+    function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+    // Main loop
+    let last = performance.now();
+    function loop(now){
+      if(!running) return;
+      const dt = Math.min(40, now - last)*0.001; last = now;
+
+      // Soft fade to create trailing (trail control)
+      const trailAlpha = +elTrail.value; // 0.88..0.995
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = `rgba(6,7,12, ${1 - trailAlpha})`;
+      ctx.fillRect(0,0,W,H);
+
+      // Draw particles using additive blending for glow
+      ctx.globalCompositeOperation = 'lighter';
+
+      const mX = mouse.x, mY = mouse.y;
+      const interactionRadius = Math.max(60, Math.min(220, 120 * ( +elSize.value/2)));
+      const baseAttraction = 160 * (+elSpeed.value || 1);
+
+      for(let i=0;i<particles.length;i++){
+        const p = particles[i];
+
+        // subtle wandering
+        const wander = (Math.sin((p.life + now*0.001)*0.5) + Math.cos((p.life*0.7 + now*0.001)*0.3))*0.3;
+        p.vx += Math.cos(p.life*0.01 + i) * 0.001 * (+elSpeed.value);
+        p.vy += Math.sin(p.life*0.008 - i) * 0.001 * (+elSpeed.value);
+
+        // Mouse interaction: move pushes, click+drag attracts
+        if(mouse.moved){
+          const dx = p.x - mX;
+          const dy = p.y - mY;
+          const d2 = dx*dx + dy*dy;
+          const r = interactionRadius;
+          if(d2 < r*r){
+            const d = Math.sqrt(d2) || 0.0001;
+            const normx = dx / d;
+            const normy = dy / d;
+            const influence = (1 - (d / r));
+            const strength = baseAttraction * influence * dt;
+            if(mouse.down){
+              // attract: pull toward mouse
+              p.vx -= normx * strength * 0.9;
+              p.vy -= normy * strength * 0.9;
+            } else {
+              // repel: push away from mouse
+              p.vx += normx * strength * 1.0;
+              p.vy += normy * strength * 1.0;
+            }
+          }
+        }
+
+        // integrate
+        p.x += p.vx * dt * 60;
+        p.y += p.vy * dt * 60;
+
+        // wrap edges with soft reentry
+        const margin = 20;
+        if(p.x < -margin) p.x = W + margin;
+        if(p.x > W + margin) p.x = -margin;
+        if(p.y < -margin) p.y = H + margin;
+        if(p.y > H + margin) p.y = -margin;
+
+        // damping and limit
+        p.vx *= 0.985;
+        p.vy *= 0.985;
+        const vLim = 6 * (+elSpeed.value || 1);
+        p.vx = clamp(p.vx, -vLim, vLim);
+        p.vy = clamp(p.vy, -vLim, vLim);
+
+        // color & glow
+        p.life += dt*60;
+        const hue = (p.hue + p.life*0.02) % 360;
+        const sat = 78 + Math.sin(p.life*0.03 + i)*12;
+        const light = 48 + Math.cos(p.life*0.025 + i)*10;
+        const alpha = 0.6 + Math.min(0.6, Math.abs(p.vx)+Math.abs(p.vy))*0.08;
+
+        // draw glow via shadow + circle
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.beginPath();
+        const s = p.size;
+        ctx.fillStyle = `hsla(${hue}, ${sat}%, ${light}%, ${alpha})`;
+        ctx.shadowColor = `hsla(${hue}, ${sat}%, ${light}%, ${Math.min(0.85, alpha)})`;
+        ctx.shadowBlur = Math.max(6, s*10);
+        ctx.arc(0,0, Math.max(0.6, s), 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // subtle overlay: thin radial highlight around pointer when down
+      if(mouse.moved){
+        if(mouse.down){
+          ctx.globalCompositeOperation = 'screen';
+          const g = ctx.createRadialGradient(mX, mY, 0, mX, mY, interactionRadius*1.4);
+          g.addColorStop(0, 'rgba(255,255,255,0.06)');
+          g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(mX - interactionRadius*1.4, mY - interactionRadius*1.4, interactionRadius*2.8, interactionRadius*2.8);
+        }
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    // Start loop
+    requestAnimationFrame(loop);
+
+    // Gentle auto-motion to keep the field alive if mouse idle
+    let idleTimer = 0;
+    function idleTick(){
+      idleTimer += 1;
+      if(idleTimer > 12){
+        // induce a slow center swirl
+        const cx = W*0.5, cy = H*0.5;
+        for(let i=0;i<particles.length;i++){
+          const p = particles[i];
+          const dx = p.x - cx; const dy = p.y - cy;
+          const d = Math.sqrt(dx*dx+dy*dy) || 1;
+          // spin
+          p.vx += (-dy/d) * 0.001 * (+elSpeed.value);
+          p.vy += (dx/d) * 0.001 * (+elSpeed.value);
+        }
+      }
+      setTimeout(idleTick, 500);
+    }
+    idleTick();
+
+    // small helper to re-seed particles on palette change
+    randomizeBtn.addEventListener('click', ()=>{
+      randomizePalette();
+      for(let i=0;i<particles.length;i++){
+        particles[i].hue = (baseHue + (Math.random()-0.5)*hueSpread + i*0.02) % 360;
+      }
+    });
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown',(e)=>{
+      if(e.key===' ') { running = !running; toggleBtn.textContent = running? 'Pause':'Play'; if(running) requestAnimationFrame(loop); }
+      if(e.key==='r') { initParticles(+elCount.value); }
+    });
+
+    // initialize default UI label
+    countLabel.textContent = elCount.value;
+
+    // Improve performance when page hidden
+    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) running=false; else { running=true; requestAnimationFrame(loop);} });
+
+    // Touch support: translate touches to pointer
+    window.addEventListener('touchstart',(e)=>{ const t = e.touches[0]; if(t) updatePointer(t); mouse.down = true; }, {passive:true});
+    window.addEventListener('touchmove',(e)=>{ const t = e.touches[0]; if(t) updatePointer(t); }, {passive:true});
+    window.addEventListener('touchend',(e)=>{ mouse.down = false; }, {passive:true});
+
+  })();
+  </script>
+</body>
+</html>
