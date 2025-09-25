@@ -52,9 +52,37 @@
     }
     @keyframes grain{ 0%{ transform: translate3d(0,0,0);} 100%{ transform: translate3d(25%, -25%, 0);} }
 
-    .panel{ position: fixed; z-index:2; right:24px; bottom:24px; width:min(420px, calc(100vw - 48px));
-      background: var(--panel); border: 1px solid rgba(255,255,255,0.08); box-shadow: var(--shadow); border-radius: var(--radius);
-      overflow:hidden; backdrop-filter: blur(10px) saturate(120%);
+    /* toggle button */
+    #panelToggle {
+      position: fixed;
+      top: 24px;
+      left: 24px;
+      z-index: 3;
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #panelToggle:hover {
+      background: rgba(255,255,255,0.08);
+    }
+
+    .panel{ 
+      position: fixed; 
+      z-index:2; 
+      top:70px; 
+      left:24px; 
+      width:min(420px, calc(100vw - 48px));
+      background: var(--panel); 
+      border: 1px solid rgba(255,255,255,0.08); 
+      box-shadow: var(--shadow); 
+      border-radius: var(--radius);
+      overflow:hidden; 
+      backdrop-filter: blur(10px) saturate(120%);
+      display: none; /* hidden by default */
     }
     .panel header{ display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
     .chip{ padding:4px 10px; border-radius: 999px; border:1px solid rgba(255,255,255,0.12); color: var(--accent); font-weight: 600; font-size: 12px; }
@@ -70,7 +98,7 @@
     button:active{ transform: translateY(0); }
 
     @media (max-width: 680px){
-      .panel{ right: 16px; bottom: 16px; }
+      .panel{ left: 16px; top: 60px; }
       .rows{ grid-template-columns: 1fr; }
       input[type="range"]{ width:100%; }
     }
@@ -80,6 +108,9 @@
   <canvas id="scene"></canvas>
   <div class="vignette"></div>
   <div class="grain"></div>
+
+  <!-- toggle button -->
+  <button id="panelToggle">☰</button>
 
   <section class="panel" id="panel">
     <header>
@@ -305,6 +336,11 @@ const pointer = {
     settings.count = clamp(settings.count, 800, 16000);
     rebuild();
   }, { passive: true });
+  const panelToggle = document.getElementById('panelToggle');
+  const panel = document.getElementById('panel');
+  panelToggle.addEventListener('click', ()=>{
+    panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+  });
   </script>
 </body>
 </html>
