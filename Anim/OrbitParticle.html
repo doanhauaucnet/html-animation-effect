@@ -43,12 +43,6 @@
     button{appearance:none;border:0;padding:8px 10px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));color:var(--accent);cursor:pointer}
     .controls .footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
 
-    /* badges */
-    .kbd{display:inline-block;padding:4px 8px;border-radius:6px;background:rgba(0,0,0,0.2);font-size:11px;color:var(--accent)}
-
-    /* subtle credit at bottom */
-    .credit{position:fixed;right:18px;bottom:18px;color:rgba(255,255,255,0.6);font-size:12px;z-index:30}
-
     /* responsive */
     @media (max-width:420px){.controls{width:92%;left:4%;right:4%;}}
   </style>
@@ -60,9 +54,6 @@
   </div>
 
   <div class="controls" aria-label="Visualization controls">
-    <h1>Mesmerizing Orbits</h1>
-    <p>Interactive particle orbits with soft glow, trails and pointer attraction. Try clicking, dragging and the shortcuts below.</p>
-
     <div class="row">
       <label for="count">Particles</label>
       <input id="count" type="range" min="80" max="1600" value="640">
@@ -81,77 +72,65 @@
       <span id="trailVal" class="small" style="width:46px;text-align:right">0.92</span>
     </div>
 
-    <div class="row">
-      <label for="hue">Hue Shift</label>
-      <input id="hue" type="range" min="0" max="360" value="210">
-      <span id="hueVal" class="small" style="width:46px;text-align:right">210°</span>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:6px">
-      <button id="pauseBtn">Pause</button>
-      <button id="screenshotBtn">Screenshot</button>
-      <button id="fullscreenBtn">Fullscreen</button>
-    </div>
-
     <div class="footer">
-      <div class="small">Space: pause • F: fullscreen • S: screenshot • Click: toggle attraction</div>
-      <div class="kbd">GPU friendly</div>
+      <div class="small">Click: toggle attraction • Shift+Click: repel</div>
     </div>
   </div>
 
-  <div class="credit">Made with ❤️ — Interactive Canvas</div>
-
   <script>
-    // Utilities
     const dpr = Math.max(1, window.devicePixelRatio || 1);
 
-    // Canvas setup
     const bg = document.getElementById('bg');
     const main = document.getElementById('main');
     const bgCtx = bg.getContext('2d');
     const ctx = main.getContext('2d');
 
-    let W = 0, H = 0, cx = 0, cy = 0;
+    const stage = {
+      w: 0,
+      h: 0,
+      cx: 0,
+      cy: 0
+    };
+
     function resize(){
-      W = Math.max(300, innerWidth);
-      H = Math.max(200, innerHeight);
+      stage.w = Math.max(300, window.innerWidth);
+      stage.h = Math.max(200, window.innerHeight);
       [bg, main].forEach(c => {
-        c.width = Math.floor(W * dpr);
-        c.height = Math.floor(H * dpr);
-        c.style.width = W + 'px';
-        c.style.height = H + 'px';
+        c.width = Math.floor(stage.w * dpr);
+        c.height = Math.floor(stage.h * dpr);
+        c.style.width = stage.w + 'px';
+        c.style.height = stage.h + 'px';
       });
       bgCtx.setTransform(dpr,0,0,dpr,0,0);
       ctx.setTransform(dpr,0,0,dpr,0,0);
-      cx = W/2; cy = H/2;
+      stage.cx = stage.w / 2; 
+      stage.cy = stage.h / 2;
       drawStarfield();
     }
-    addEventListener('resize', resize);
+    window.addEventListener('resize', resize);
 
-    // Starfield for background
     const stars = [];
     function initStarfield(){
       stars.length = 0;
-      const count = Math.min(500, Math.floor((W*H)/8000));
+      const count = Math.min(500, Math.floor((stage.w * stage.h)/8000));
       for(let i=0;i<count;i++){
         stars.push({
-          x: Math.random()*W,
-          y: Math.random()*H,
-          r: Math.random()*1.6 + 0.2,
-          a: Math.random()*0.8 + 0.2,
-          tw: Math.random()*0.02 + 0.005
+          x: Math.random() * stage.w,
+          y: Math.random() * stage.h,
+          r: Math.random() * 1.6 + 0.2,
+          a: Math.random() * 0.8 + 0.2,
+          tw: Math.random() * 0.02 + 0.005
         });
       }
     }
     function drawStarfield(){
       initStarfield();
-      bgCtx.clearRect(0,0,W,H);
-      // subtle nebula radial vignette
-      const grd = bgCtx.createLinearGradient(0,0,0,H);
+      bgCtx.clearRect(0,0,stage.w,stage.h);
+      const grd = bgCtx.createLinearGradient(0,0,0,stage.h);
       grd.addColorStop(0, 'rgba(6,8,20,0.35)');
       grd.addColorStop(1, 'rgba(2,6,12,0.45)');
       bgCtx.fillStyle = grd;
-      bgCtx.fillRect(0,0,W,H);
+      bgCtx.fillRect(0,0,stage.w,stage.h);
 
       for(const s of stars){
         bgCtx.beginPath();
@@ -161,59 +140,47 @@
         bgCtx.fill();
       }
       bgCtx.globalAlpha = 1;
-      // add a very soft radial glow
-      const rg = bgCtx.createRadialGradient(cx, cy, Math.min(W,H)*0.05, cx, cy, Math.min(W,H)*0.9);
+      const rg = bgCtx.createRadialGradient(stage.cx, stage.cy, Math.min(stage.w, stage.h)*0.05, stage.cx, stage.cy, Math.min(stage.w, stage.h)*0.9);
       rg.addColorStop(0, 'rgba(12,20,38,0.12)');
       rg.addColorStop(1, 'rgba(2,6,12,0.6)');
       bgCtx.fillStyle = rg;
-      bgCtx.fillRect(0,0,W,H);
+      bgCtx.fillRect(0,0,stage.w,stage.h);
     }
 
-    // Particles system
     class Particle{
       constructor(i, total){
         this.reset(i, total);
       }
       reset(i, total){
-        // distribute orbits nicely with some jitter
         const ratio = i/total;
-        // radius distribution skewed towards outer
-        this.orbit = (0.04 + Math.pow(Math.random(), 1.5) * 0.96) * Math.min(W,H) * (0.22 + 0.78*ratio);
+        this.orbit = (0.04 + Math.pow(Math.random(), 1.5) * 0.96) * Math.min(stage.w, stage.h) * (0.22 + 0.78*ratio);
         this.angle = Math.random() * Math.PI * 2;
-        // angular velocity - vary sign
         this.omega = (0.0008 + Math.random()*0.0024) * (Math.random()>0.5?1:-1);
-        // size tiny
         this.baseSize = 0.9 + Math.random()*2.6;
-        this.hueOffset = Math.random()*60 - 30; // small color variation
+        this.hueOffset = Math.random()*60 - 30;
         this.alpha = 0.6 + Math.random()*0.4;
-        this.x = cx + Math.cos(this.angle) * this.orbit;
-        this.y = cy + Math.sin(this.angle) * this.orbit;
+        this.x = stage.cx + Math.cos(this.angle) * this.orbit;
+        this.y = stage.cy + Math.sin(this.angle) * this.orbit;
         this.vx = 0; this.vy = 0;
       }
       update(dt, t, attractor){
-        // natural orbital motion
         this.angle += this.omega * dt * params.speed * (0.6 + 0.8*Math.sin(t*0.001 + this.hueOffset));
-        // slight radial breathing
         const breathe = 1 + 0.02*Math.sin(t*0.002 + this.angle*2);
-        let tx = cx + Math.cos(this.angle) * this.orbit * breathe;
-        let ty = cy + Math.sin(this.angle) * this.orbit * breathe;
+        let tx = stage.cx + Math.cos(this.angle) * this.orbit * breathe;
+        let ty = stage.cy + Math.sin(this.angle) * this.orbit * breathe;
 
-        // apply attractor/repeller
         if(attractor.active){
           const ax = attractor.x, ay = attractor.y;
           const dx = ax - this.x, dy = ay - this.y;
           const dist = Math.max(20, Math.hypot(dx,dy));
-          // force magnitude falls off with distance
           const force = (attractor.mode === 'attract' ? 1 : -1) * Math.min(2500/(dist*dist), 0.8);
           this.vx += (dx/dist) * force * dt * params.speed;
           this.vy += (dy/dist) * force * dt * params.speed;
         }
 
-        // gently move toward target orbital position
         this.vx += (tx - this.x) * 0.002 * dt;
         this.vy += (ty - this.y) * 0.002 * dt;
 
-        // damping
         this.vx *= 0.96; this.vy *= 0.96;
         this.x += this.vx * dt;
         this.y += this.vy * dt;
@@ -221,7 +188,6 @@
       draw(ctx, t){
         const hue = (params.hue + this.hueOffset + 360) % 360;
         const size = this.baseSize * (1 + 0.25*Math.sin(t*0.004 + this.angle*3));
-        // soft glow using shadow
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         ctx.shadowBlur = size * 12;
@@ -232,7 +198,6 @@
       }
     }
 
-    // Parameters & UI
     const params = {
       count: 640,
       speed: 1.0,
@@ -245,20 +210,13 @@
       count: document.getElementById('count'),
       speed: document.getElementById('speed'),
       trail: document.getElementById('trail'),
-      hue: document.getElementById('hue'),
       countVal: document.getElementById('countVal'),
       speedVal: document.getElementById('speedVal'),
-      trailVal: document.getElementById('trailVal'),
-      hueVal: document.getElementById('hueVal'),
-      pauseBtn: document.getElementById('pauseBtn'),
-      screenshotBtn: document.getElementById('screenshotBtn'),
-      fullscreenBtn: document.getElementById('fullscreenBtn')
+      trailVal: document.getElementById('trailVal')
     };
 
-    // Attractor state
-    const attractor = {active:false, x:cx, y:cy, mode:'attract'}; // mode: attract | repel
+    const attractor = {active:false, x:0, y:0, mode:'attract'};
 
-    // Particles array
     let particles = [];
     function rebuildParticles(){
       const newCount = Math.max(8, Math.min(4000, Math.round(params.count)));
@@ -268,52 +226,45 @@
       }
     }
 
-    // Animation loop
     let then = performance.now();
-    let rafId = null;
-
     function frame(now){
-      const dt = Math.min(48, now - then); // ms
+      const dt = Math.min(48, now - then);
       then = now;
-      // fade trails
+
+      // AUTOMATIC HUE SHIFT: Update hue based on time
+      // 0.02 is the speed of rotation (lower = slower)
+      params.hue = (params.hue + dt * 0.02) % 360;
+
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = `rgba(3,6,12,${1 - params.trail})`;
-      ctx.fillRect(0,0,W,H);
+      ctx.fillRect(0,0,stage.w,stage.h);
 
-      // subtle additive overlay
       ctx.globalCompositeOperation = 'lighter';
 
-      // update & draw
       for(const p of particles){
         p.update(dt, now, attractor);
         p.draw(ctx, now);
       }
 
-      // update some twinkling stars on bg
       for(const s of stars){
         s.a += Math.sin(now*0.0007 + s.tw*100) * 0.002;
         s.a = Math.min(1, Math.max(0.12, s.a));
       }
 
-      if(params.running) rafId = requestAnimationFrame(frame);
+      if(params.running) requestAnimationFrame(frame);
     }
 
-    // Interaction
-    let pointerDown = false;
     function onPointerMove(e){
       const rect = main.getBoundingClientRect();
-      const x = (e.clientX - rect.left);
-      const y = (e.clientY - rect.top);
-      attractor.x = x; attractor.y = y;
+      attractor.x = (e.clientX - rect.left);
+      attractor.y = (e.clientY - rect.top);
     }
     function onPointerDown(e){
-      pointerDown = true;
       attractor.active = true;
       attractor.mode = e.shiftKey ? 'repel' : 'attract';
       onPointerMove(e);
     }
-    function onPointerUp(e){
-      pointerDown = false;
+    function onPointerUp(){
       attractor.active = false;
     }
 
@@ -321,59 +272,27 @@
     main.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('pointerup', onPointerUp);
 
-    // UI events
     ui.count.addEventListener('input', ()=>{ params.count = +ui.count.value; ui.countVal.textContent = ui.count.value; rebuildParticles(); });
     ui.speed.addEventListener('input', ()=>{ params.speed = +ui.speed.value; ui.speedVal.textContent = (+ui.speed.value).toFixed(2); });
     ui.trail.addEventListener('input', ()=>{ params.trail = +ui.trail.value; ui.trailVal.textContent = (+ui.trail.value).toFixed(3); });
-    ui.hue.addEventListener('input', ()=>{ params.hue = +ui.hue.value; ui.hueVal.textContent = ui.hue.value + '°'; });
 
-    ui.pauseBtn.addEventListener('click', ()=>{ params.running = !params.running; ui.pauseBtn.textContent = params.running ? 'Pause' : 'Resume'; if(params.running){ then = performance.now(); rafId = requestAnimationFrame(frame);} else cancelAnimationFrame(rafId); });
-
-    ui.screenshotBtn.addEventListener('click', ()=>{ downloadImage(); });
-    ui.fullscreenBtn.addEventListener('click', ()=>{ toggleFullscreen(); });
-
-    function toggleFullscreen(){
-      if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
-      else document.exitFullscreen?.();
-    }
-
-    function downloadImage(){
-      // temporary composite of bg + main
-      const tmp = document.createElement('canvas');
-      tmp.width = W * dpr; tmp.height = H * dpr;
-      const tctx = tmp.getContext('2d');
-      tctx.drawImage(bg, 0, 0, tmp.width, tmp.height);
-      tctx.drawImage(main, 0, 0, tmp.width, tmp.height);
-      const url = tmp.toDataURL('image/png');
-      const a = document.createElement('a'); a.href = url; a.download = 'mesmerizing-orbits.png'; a.click();
-    }
-
-    // keyboard shortcuts
-    addEventListener('keydown', (e)=>{
-      if(e.code === 'Space'){ e.preventDefault(); ui.pauseBtn.click(); }
-      if(e.key.toLowerCase() === 'f') ui.fullscreenBtn.click();
-      if(e.key.toLowerCase() === 's') ui.screenshotBtn.click();
-      if(e.key.toLowerCase() === 'c'){ params.hue = (params.hue + 30) % 360; ui.hue.value = params.hue; ui.hueVal.textContent = params.hue + '°'; }
-    });
-
-    // init
     function init(){
       resize();
-      // initial UI text
+      attractor.x = stage.cx;
+      attractor.y = stage.cy;
       ui.countVal.textContent = ui.count.value;
       ui.speedVal.textContent = (+ui.speed.value).toFixed(2);
       ui.trailVal.textContent = (+ui.trail.value).toFixed(3);
-      ui.hueVal.textContent = ui.hue.value + '°';
 
-      // genesis of particles
-      params.count = +ui.count.value; params.speed = +ui.speed.value; params.trail = +ui.trail.value; params.hue = +ui.hue.value;
+      params.count = +ui.count.value; 
+      params.speed = +ui.speed.value; 
+      params.trail = +ui.trail.value; 
       rebuildParticles();
 
-      // clear main
-      ctx.fillStyle = 'rgba(3,6,12,1)'; ctx.fillRect(0,0,W,H);
-      then = performance.now(); rafId = requestAnimationFrame(frame);
+      ctx.fillStyle = 'rgba(3,6,12,1)'; ctx.fillRect(0,0,stage.w,stage.h);
+      then = performance.now();
+      requestAnimationFrame(frame);
 
-      // gentle animation for background twinkle
       setInterval(()=>{ drawStarfield(); }, 4000);
     }
 
