@@ -149,9 +149,9 @@
 
     class Particle{
       constructor(i, total){
-        this.reset(i, total);
+        this.reset(i, total, true);
       }
-      reset(i, total){
+      reset(i, total, initial = false){
         const ratio = i/total;
         this.orbit = (0.04 + Math.pow(Math.random(), 1.5) * 0.96) * Math.min(stage.w, stage.h) * (0.22 + 0.78*ratio);
         this.angle = Math.random() * Math.PI * 2;
@@ -159,11 +159,21 @@
         this.baseSize = 0.9 + Math.random()*2.6;
         this.hueOffset = Math.random()*60 - 30;
         this.alpha = 0.6 + Math.random()*0.4;
-        this.x = stage.cx + Math.cos(this.angle) * this.orbit;
-        this.y = stage.cy + Math.sin(this.angle) * this.orbit;
-        this.vx = 0; this.vy = 0;
+        
+        // Target calculation
+        const tx = stage.cx + Math.cos(this.angle) * this.orbit;
+        const ty = stage.cy + Math.sin(this.angle) * this.orbit;
+        
+        // Spawn exactly at target to prevent initial explosion
+        this.x = tx;
+        this.y = ty;
+        this.vx = 0; 
+        this.vy = 0;
       }
       update(dt, t, attractor){
+        // Speed scaling should be normalized to around 16ms (60fps)
+        const timeFactor = dt / 16.66;
+        
         this.angle += this.omega * dt * params.speed * (0.6 + 0.8*Math.sin(t*0.001 + this.hueOffset));
         const breathe = 1 + 0.02*Math.sin(t*0.002 + this.angle*2);
         let tx = stage.cx + Math.cos(this.angle) * this.orbit * breathe;
@@ -172,18 +182,26 @@
         if(attractor.active){
           const ax = attractor.x, ay = attractor.y;
           const dx = ax - this.x, dy = ay - this.y;
-          const dist = Math.max(20, Math.hypot(dx,dy));
-          const force = (attractor.mode === 'attract' ? 1 : -1) * Math.min(2500/(dist*dist), 0.8);
-          this.vx += (dx/dist) * force * dt * params.speed;
-          this.vy += (dy/dist) * force * dt * params.speed;
+          const distSq = dx*dx + dy*dy;
+          const dist = Math.sqrt(distSq) || 1;
+          
+          // Smooth the force to prevent infinite acceleration at dist 0
+          const force = (attractor.mode === 'attract' ? 1 : -1) * Math.min(2000/(distSq + 1000), 0.5);
+          this.vx += (dx/dist) * force * timeFactor * params.speed;
+          this.vy += (dy/dist) * force * timeFactor * params.speed;
         }
 
+        // Tension force
         this.vx += (tx - this.x) * 0.002 * dt;
         this.vy += (ty - this.y) * 0.002 * dt;
 
-        this.vx *= 0.96; this.vy *= 0.96;
-        this.x += this.vx * dt;
-        this.y += this.vy * dt;
+        // Friction
+        const friction = Math.pow(0.96, timeFactor);
+        this.vx *= friction; 
+        this.vy *= friction;
+        
+        this.x += this.vx * timeFactor;
+        this.y += this.vy * timeFactor;
       }
       draw(ctx, t){
         const hue = (params.hue + this.hueOffset + 360) % 360;
@@ -228,11 +246,11 @@
 
     let then = performance.now();
     function frame(now){
-      const dt = Math.min(48, now - then);
+      // Cap dt to prevent physics explosions after tab-switching/stutter
+      // Use a smaller cap (32ms) to ensure stability
+      let dt = Math.min(32, now - then);
       then = now;
 
-      // AUTOMATIC HUE SHIFT: Update hue based on time
-      // 0.02 is the speed of rotation (lower = slower)
       params.hue = (params.hue + dt * 0.02) % 360;
 
       ctx.globalCompositeOperation = 'source-over';
@@ -253,6 +271,13 @@
 
       if(params.running) requestAnimationFrame(frame);
     }
+
+    // FIX: Handle tab switching by resetting the "then" timestamp
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        then = performance.now();
+      }
+    });
 
     function onPointerMove(e){
       const rect = main.getBoundingClientRect();
@@ -289,7 +314,9 @@
       params.trail = +ui.trail.value; 
       rebuildParticles();
 
-      ctx.fillStyle = 'rgba(3,6,12,1)'; ctx.fillRect(0,0,stage.w,stage.h);
+      ctx.fillStyle = 'rgba(3,6,12,1)'; 
+      ctx.fillRect(0,0,stage.w,stage.h);
+      
       then = performance.now();
       requestAnimationFrame(frame);
 
