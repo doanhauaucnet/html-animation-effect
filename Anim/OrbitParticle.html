@@ -56,20 +56,20 @@
   <div class="controls" aria-label="Visualization controls">
     <div class="row">
       <label for="count">Particles</label>
-      <input id="count" type="range" min="80" max="1600" value="640">
+      <input id="count" type="range" min="80"  step="10" max="1600" value="640">
       <span id="countVal" class="small" style="width:46px;text-align:right">640</span>
     </div>
 
     <div class="row">
       <label for="speed">Speed</label>
-      <input id="speed" type="range" min="0" max="3" step="0.01" value="1">
+      <input id="speed" type="range" min="0" max="3" step="0.1" value="1">
       <span id="speedVal" class="small" style="width:46px;text-align:right">1.00</span>
     </div>
 
     <div class="row">
       <label for="trail">Trail</label>
-      <input id="trail" type="range" min="0.88" max="0.995" step="0.001" value="0.92">
-      <span id="trailVal" class="small" style="width:46px;text-align:right">0.92</span>
+      <input id="trail" type="range" min="0" max="1" step="0.1" value="0.9">
+      <span id="trailVal" class="small" style="width:46px;text-align:right">0.9</span>
     </div>
 
     <div class="footer">
@@ -219,7 +219,7 @@
     const params = {
       count: 640,
       speed: 1.0,
-      trail: 0.92,
+      trail: 0.9,
       hue: 210,
       running: true
     };
