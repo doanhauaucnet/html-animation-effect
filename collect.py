@@ -1,8 +1,8 @@
 import os
 
 # === Configuration ===
-whitelist_ext = {'.py', '.js', '.java', '.cpp', '.c', '.kt'}  # Allowed extensions
-blacklist_ext = {'.log', '.tmp'}  # Disallowed extensions
+whitelist_ext = {'.html'}  # Allowed extensions
+blacklist_ext = {}  # Disallowed extensions
 
 output_file = 'collected_code.txt'
 
