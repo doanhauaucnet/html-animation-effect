@@ -5,28 +5,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Animation Library</title>
-    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
     <style>
-        /* Basic styling for the body and font */
         body {
             font-family: 'Inter', sans-serif;
             background-color: #111827;
-            /* A dark gray background */
             color: #f3f4f6;
         }
 
         /* Style for the iframe to ensure it's contained and looks good */
         #animation-preview {
             border: 1px solid #374151;
-            /* A slightly lighter gray border */
             border-radius: 0.75rem;
-            /* Rounded corners */
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
 
-        /* Custom styles for the navigation buttons for a better look and feel */
         .nav-button {
             transition: all 0.2s ease-in-out;
         }
@@ -38,7 +32,6 @@
 
         .nav-button.active {
             background-color: #3b82f6;
-            /* Blue-500 for active state */
             color: white;
             font-weight: 600;
         }
@@ -52,23 +45,19 @@
         <h1 class="text-2xl font-bold text-white">My Animations</h1>
         <nav id="animation-list" class="space-y-2">
             <!-- Animation links will be added here by JavaScript -->
-            <!-- You can also add them manually like this: -->
-            <!-- <button data-src="Fluid Particle Art.html" class="nav-button w-full text-left bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg">Fluid Particle Art</button> -->
-            <!-- <button data-src="Bioluminescent Canvas.html" class="nav-button w-full text-left bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg">Bioluminescent Canvas</button> -->
         </nav>
     </aside>
 
     <!-- Main Content Area for Previewing Animations -->
     <main class="flex-1 flex flex-col p-6">
         <div class="flex-1 w-full h-full">
-            <!-- The iframe will display the selected animation -->
             <iframe id="animation-preview" class="w-full h-full bg-black" src="" title="Animation Preview"></iframe>
         </div>
     </main>
 
     <script>
         // --- Configuration ---
-        // Add the filenames of your HTML animations to this array.
+        // This will be auto update by python script.
         // Make sure this library file is in the SAME folder as your animation files.
         const animationFiles = [
             "Anim/Atom.html",
@@ -115,11 +104,10 @@
          */
         function createAnimationLink(fileName) {
             const button = document.createElement('button');
-            // Remove any prefix before the last '/' and '.html' suffix
             const displayName = fileName.replace(/^.*\//, '').replace('.html', '').replace(/([A-Z])/g, ' $1').trim();
 
             button.textContent = displayName;
-            button.dataset.src = fileName; // Store the filename in a data attribute
+            button.dataset.src = fileName;
             button.className = 'nav-button w-full text-left bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg';
 
             button.addEventListener('click', () => {
@@ -135,8 +123,6 @@
 
 
         // --- Initialization ---
-
-        // Populate the navigation list with buttons for each animation file
         animationFiles.forEach(createAnimationLink);
 
         // Automatically load the first animation on page load
@@ -144,7 +130,6 @@
         if (firstButton) {
             firstButton.click();
         } else {
-            // If no animations are listed, show a message in the preview area
             previewFrame.srcdoc = `<body style='background-color:#111827; color:white; display:flex; justify-content:center; align-items:center; font-family: Inter, sans-serif;'><h1>No animations found. Add files to the 'animationFiles' array in the script.</h1></body>`;
         }
 
