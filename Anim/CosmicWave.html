@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesmerize Flow - Chronos</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020202;
+            user-select: none;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Subtler glow for Chronos mode */
+        .chronos-active {
+            animation: slow-pulse 5s infinite ease-in-out;
+        }
+
+        @keyframes slow-pulse {
+            0% { background-color: #020202; }
+            50% { background-color: #050a12; }
+            100% { background-color: #020202; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height, particles;
+        let particleCount = 1600;
+        let hue = Math.random() * 360;
+        let noiseScale = 0.004;
+        let zOffset = 0;
+        
+        let isChronos = false;
+        let chronosTimer = 0;
+        let isGravityWell = false;
+
+        const mouse = { x: -1000, y: -1000 };
+
+        class Particle {
+            constructor() {
+                this.init();
+            }
+
+            init() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5);
+                this.vy = (Math.random() - 0.5);
+                this.alpha = Math.random() * 0.4 + 0.1;
+                this.history = [];
+                this.maxHistory = Math.floor(Math.random() * 10 + 6);
+                this.brightness = 0;
+            }
+
+            update() {
+                // Time Scale Factor
+                const timeScale = isChronos ? 0.15 : 1.0;
+
+                const dx = this.x - mouse.x;
+                const dy = this.y - mouse.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+                if (isGravityWell && dist < 800) {
+                    // Pull in and swirl
+                    const pull = 0.6 * timeScale;
+                    const swirl = 0.45 * timeScale;
+                    this.vx -= (dx / dist) * pull;
+                    this.vy -= (dy / dist) * pull;
+                    
+                    // Tangential velocity for the orbital effect
+                    this.vx += (dy / dist) * swirl;
+                    this.vy -= (dx / dist) * swirl;
+                } else {
+                    // Normal Flow Field
+                    const angle = (Math.sin(this.x * noiseScale) + Math.cos(this.y * noiseScale) + zOffset) * Math.PI * 2;
+                    this.vx += Math.cos(angle) * (0.15 * timeScale);
+                    this.vy += Math.sin(angle) * (0.15 * timeScale);
+
+                    // Standard gentle repel
+                    if (dist < 120) {
+                        const repel = ((120 - dist) / 120) * timeScale;
+                        this.vx -= (dx / dist) * repel * -1.8;
+                        this.vy -= (dy / dist) * repel * -1.8;
+                    }
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Dynamic friction - less friction in slow motion to keep movement fluid
+                const friction = isChronos ? 0.98 : (isGravityWell ? 0.92 : 0.94);
+                this.vx *= friction;
+                this.vy *= friction;
+
+                // Boundary handling
+                if (this.x < -30 || this.x > width + 30 || this.y < -30 || this.y > height + 30) {
+                    this.x = Math.random() * width;
+                    this.y = Math.random() * height;
+                    this.history = [];
+                }
+
+                this.history.push({x: this.x, y: this.y});
+                if (this.history.length > this.maxHistory) {
+                    this.history.shift();
+                }
+            }
+
+            draw() {
+                if (this.history.length < 2) return;
+
+                ctx.beginPath();
+                
+                // Color shifts: Blue-ish during Chronos, Dynamic otherwise
+                let h = isChronos ? 200 : hue;
+                let s = isChronos ? 80 : 65;
+                let l = isChronos ? 60 : 55;
+                let a = isChronos ? this.alpha * 1.5 : this.alpha;
+
+                ctx.strokeStyle = `hsla(${h}, ${s}%, ${l}%, ${a})`;
+                ctx.lineWidth = isChronos ? 1.0 : 0.7;
+                
+                ctx.moveTo(this.history[0].x, this.history[0].y);
+                for (let i = 1; i < this.history.length; i++) {
+                    ctx.lineTo(this.history[i].x, this.history[i].y);
+                }
+                ctx.stroke();
+            }
+        }
+
+        function setup() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            particles = [];
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function toggleChronos() {
+            if (isChronos) {
+                isChronos = false;
+                document.body.classList.remove('chronos-active');
+            } else {
+                isChronos = true;
+                chronosTimer = 300; // ~5 seconds at 60fps
+                document.body.classList.add('chronos-active');
+            }
+        }
+
+        function animate() {
+            // Adjust blur for mode
+            ctx.fillStyle = isChronos ? 'rgba(2, 2, 2, 0.05)' : 'rgba(2, 2, 2, 0.15)';
+            ctx.fillRect(0, 0, width, height);
+
+            const timeScale = isChronos ? 0.15 : 1.0;
+            zOffset += 0.0015 * timeScale;
+            if (!isChronos && !isGravityWell) hue += 0.1;
+
+            if (isChronos) {
+                chronosTimer--;
+                if (chronosTimer <= 0) {
+                    isChronos = false;
+                    document.body.classList.remove('chronos-active');
+                }
+            }
+
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', setup);
+        
+        window.addEventListener('mousemove', e => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        // Scroll interaction: Adjust complexity (Noise Scale)
+        window.addEventListener('wheel', (e) => {
+            // Prevent actual page scroll
+            e.preventDefault();
+            
+            // Adjust complexity based on scroll direction
+            if (e.deltaY < 0) {
+                noiseScale *= 1.08; // Increase complexity (scroll up)
+            } else {
+                noiseScale *= 0.92; // Decrease complexity (scroll down)
+            }
+
+            // Clamping to keep the simulation visually pleasant
+            noiseScale = Math.min(Math.max(noiseScale, 0.0005), 0.04);
+        }, { passive: false });
+
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                if (!isChronos) hue = Math.random() * 360;
+                // Randomized shift on click, but scroll allows fine-tuning
+                noiseScale = Math.random() * 0.006 + 0.002;
+            } else if (e.button === 2) {
+                isGravityWell = true;
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 2) isGravityWell = false;
+        });
+
+        window.addEventListener('contextmenu', e => e.preventDefault());
+
+        window.addEventListener('dblclick', toggleChronos);
+
+        // Touch handling
+        let lastTap = 0;
+        window.addEventListener('touchstart', e => {
+            const now = Date.now();
+            mouse.x = e.touches[0].clientX;
+            mouse.y = e.touches[0].clientY;
+            
+            if (now - lastTap < 300) {
+                toggleChronos();
+            } else {
+                isGravityWell = true;
+            }
+            lastTap = now;
+        });
+
+        window.addEventListener('touchend', () => {
+            isGravityWell = false;
+        });
+
+        setup();
+        animate();
+    </script>
+</body>
+</html>
