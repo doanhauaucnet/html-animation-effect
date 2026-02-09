@@ -14,56 +14,75 @@
             color: #f3f4f6;
         }
 
-        /* Style for the iframe to ensure it's contained and looks good */
         #animation-preview {
             border: 1px solid #374151;
             border-radius: 0.75rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
         }
 
         .nav-button {
             transition: all 0.2s ease-in-out;
         }
 
-        .nav-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
-
         .nav-button.active {
-            background-color: #3b82f6;
+            background-color: #3b82f6 !important;
             color: white;
             font-weight: 600;
+        }
+
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 10px;
         }
     </style>
 </head>
 
 <body class="flex flex-col md:flex-row h-screen overflow-hidden">
 
-    <!-- Sidebar Navigation -->
-    <aside class="w-full md:w-64 bg-gray-900 p-6 space-y-4 overflow-y-auto">
-        <h1 class="text-2xl font-bold text-white">My Animations</h1>
-        <nav id="animation-list" class="space-y-2">
-            <!-- Animation links will be added here by JavaScript -->
-        </nav>
+    <aside class="w-full md:w-80 bg-gray-900 flex flex-col border-r border-gray-800">
+        <div class="p-6 pb-2">
+            <h1 class="text-2xl font-bold text-white mb-4">My Animations</h1>
+            
+            <div class="relative group">
+                <input 
+                    type="text" 
+                    id="search-input" 
+                    placeholder="Search animations..." 
+                    class="w-full bg-gray-800 border border-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 outline-none transition-all"
+                >
+                <div id="search-count" class="absolute right-3 top-2.5 text-xs text-gray-500 font-medium pt-0.5"></div>
+            </div>
+        </div>
+
+        <nav id="animation-list" class="flex-1 overflow-y-auto p-4 space-y-2">
+            </nav>
+
+        <div class="p-4 border-t border-gray-800 text-[10px] text-gray-500 text-center">
+            Total: <span id="total-count">0</span> animations
+        </div>
     </aside>
 
-    <!-- Main Content Area for Previewing Animations -->
-    <main class="flex-1 flex flex-col p-6">
-        <div class="flex-1 w-full h-full">
+    <main class="flex-1 flex flex-col p-4 md:p-6 bg-gray-950">
+        <div class="flex-1 w-full h-full relative">
             <iframe id="animation-preview" class="w-full h-full bg-black" src="" title="Animation Preview"></iframe>
         </div>
     </main>
 
     <script>
         // --- Configuration ---
-        // This will be auto update by python script.
-        // Make sure this library file is in the SAME folder as your animation files.
         const animationFiles = [
             "Anim/Atom.html",
             "Anim/Aurora Flowfield.html",
             "Anim/Bioluminescent Star.html",
             "Anim/Black Hole Particle.html",
+            "Anim/CelestialDance.html",
             "Anim/Cosmic Particle.html",
             "Anim/Cosmic Sea.html",
             "Anim/CosmicWave.html",
@@ -75,66 +94,84 @@
             "Anim/Matrix Rain.html",
             "Anim/Nebula Cluster.html",
             "Anim/Orb Simulation.html",
+            "Anim/OrbitParticle.html",
             "Anim/Particle2.html",
             "Anim/Particle3.html",
             "Anim/Particle4.html",
             "Anim/Particle6.html",
             "Anim/Snow Sky.html",
-            "Anim/Solar.html",
             "Anim/Star Cloud And Comet.html",
             "Anim/Stardust.html",
-            "Anim/Test.html",
-            "Anim/Test2.html",
             "Anim/Tokyo Metro Simulation.html",
             "Anim/Water Elemental.html",
             "Anim/Wind Elemental.html",
             "Anim/Wind Flow.html"
         ];
 
-        // --- DOM Elements ---
         const animationList = document.getElementById('animation-list');
         const previewFrame = document.getElementById('animation-preview');
+        const searchInput = document.getElementById('search-input');
+        const searchCount = document.getElementById('search-count');
+        const totalCountDisplay = document.getElementById('total-count');
+        
         let currentButton = null;
-
-        // --- Functions ---
+        totalCountDisplay.textContent = animationFiles.length;
 
         /**
-         * Creates a button for an animation and adds it to the navigation list.
-         * @param {string} fileName - The filename of the animation HTML file.
+         * Cleans file names for display
          */
-        function createAnimationLink(fileName) {
-            const button = document.createElement('button');
-            const displayName = fileName.replace(/^.*\//, '').replace('.html', '').replace(/([A-Z])/g, ' $1').trim();
+        function formatName(fileName) {
+            return fileName.split('/').pop().replace('.html', '').replace(/([A-Z])/g, ' $1').trim();
+        }
 
-            button.textContent = displayName;
-            button.dataset.src = fileName;
-            button.className = 'nav-button w-full text-left bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg';
+        /**
+         * Renders the animation list based on filter
+         */
+        function renderList(filter = '') {
+            animationList.innerHTML = '';
+            const filtered = animationFiles.filter(file => 
+                formatName(file).toLowerCase().includes(filter.toLowerCase())
+            );
 
-            button.addEventListener('click', () => {
-                previewFrame.src = fileName;
+            filtered.forEach(fileName => {
+                const button = document.createElement('button');
+                const displayName = formatName(fileName);
 
-                if (currentButton) currentButton.classList.remove('active');
-                button.classList.add('active');
-                currentButton = button;
+                button.textContent = displayName;
+                button.className = 'nav-button w-full text-left bg-gray-800/50 hover:bg-gray-700 text-gray-300 hover:text-white text-sm py-2 px-4 rounded-lg border border-transparent hover:border-gray-600';
+                
+                // Keep active state if this was the selected file
+                if (currentButton && currentButton.dataset.src === fileName) {
+                    button.classList.add('active');
+                }
+
+                button.dataset.src = fileName;
+                button.addEventListener('click', () => {
+                    previewFrame.src = fileName;
+                    document.querySelectorAll('.nav-button').forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    currentButton = button;
+                });
+
+                animationList.appendChild(button);
             });
 
-            animationList.appendChild(button);
+            // Update search count indicator
+            searchCount.textContent = filter ? `${filtered.length} found` : '';
         }
 
+        // --- Event Listeners ---
+
+        searchInput.addEventListener('input', (e) => {
+            renderList(e.target.value);
+        });
 
         // --- Initialization ---
-        animationFiles.forEach(createAnimationLink);
+        renderList();
 
-        // Automatically load the first animation on page load
-        const firstButton = animationList.querySelector('.nav-button');
-        if (firstButton) {
-            firstButton.click();
-        } else {
-            previewFrame.srcdoc = `<body style='background-color:#111827; color:white; display:flex; justify-content:center; align-items:center; font-family: Inter, sans-serif;'><h1>No animations found. Add files to the 'animationFiles' array in the script.</h1></body>`;
-        }
-
+        // Auto-load first animation
+        const firstBtn = animationList.querySelector('.nav-button');
+        if (firstBtn) firstBtn.click();
     </script>
-
 </body>
-
 </html>
