@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cosmic Star Flows</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    overflow: hidden;
+  }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+let W = canvas.width  = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  buildFlows();
+});
+
+// ─── Config ────────────────────────────────────────────────────────────────
+const NUM_FLOWS       = 7;       // number of star streams
+const STARS_PER_FLOW  = 120;     // stars per stream
+const TRAIL_LENGTH    = 22;      // history positions kept per star
+const PATH_WOBBLE     = 0.012;   // how much the path drifts each frame
+const SPEED_BASE      = 1.6;     // base travel speed
+const SPEED_SPREAD    = 0.9;     // ± speed variation within a flow
+const STAR_SIZE_MIN   = 0.6;
+const STAR_SIZE_MAX   = 2.2;
+
+// palette: one hue per flow (degrees)
+const FLOW_HUES = [200, 240, 270, 300, 180, 220, 260];
+
+// ─── Flow definition ────────────────────────────────────────────────────────
+// Each flow is described by a cubic Bezier that spans the canvas.
+// We re-generate them on resize.
+let flows = [];
+
+function randomCubicBezier() {
+  // Start from one of the 4 edges; end on another edge
+  const edges = ['top','bottom','left','right'];
+  const startEdge = edges[Math.floor(Math.random() * 4)];
+  let endEdge;
+  do { endEdge = edges[Math.floor(Math.random() * 4)]; } while (endEdge === startEdge);
+
+  function edgePt(edge) {
+    switch (edge) {
+      case 'top':    return { x: Math.random() * W, y: -20 };
+      case 'bottom': return { x: Math.random() * W, y: H + 20 };
+      case 'left':   return { x: -20, y: Math.random() * H };
+      case 'right':  return { x: W + 20, y: Math.random() * H };
+    }
+  }
+
+  const p0 = edgePt(startEdge);
+  const p3 = edgePt(endEdge);
+
+  // Control points: biased toward screen center with some spread
+  const cp1 = {
+    x: W * 0.15 + Math.random() * W * 0.7,
+    y: H * 0.15 + Math.random() * H * 0.7
+  };
+  const cp2 = {
+    x: W * 0.15 + Math.random() * W * 0.7,
+    y: H * 0.15 + Math.random() * H * 0.7
+  };
+
+  return { p0, cp1, cp2, p3 };
+}
+
+// Evaluate cubic Bezier at t ∈ [0,1]
+function bezier(b, t) {
+  const u = 1 - t;
+  return {
+    x: u*u*u*b.p0.x + 3*u*u*t*b.cp1.x + 3*u*t*t*b.cp2.x + t*t*t*b.p3.x,
+    y: u*u*u*b.p0.y + 3*u*u*t*b.cp1.y + 3*u*t*t*b.cp2.y + t*t*t*b.p3.y
+  };
+}
+
+// Bezier tangent (derivative), used to orient stars along the path
+function bezierTangent(b, t) {
+  const u = 1 - t;
+  return {
+    x: 3*(u*u*(b.cp1.x-b.p0.x) + 2*u*t*(b.cp2.x-b.cp1.x) + t*t*(b.p3.x-b.cp2.x)),
+    y: 3*(u*u*(b.cp1.y-b.p0.y) + 2*u*t*(b.cp2.y-b.cp1.y) + t*t*(b.p3.y-b.cp2.y))
+  };
+}
+
+// ─── Star class ──────────────────────────────────────────────────────────────
+class Star {
+  constructor(flowIdx, hue, curve) {
+    this.flowIdx = flowIdx;
+    this.hue     = hue;
+    this.curve   = curve;
+    this.reset(Math.random()); // stagger initial position
+  }
+
+  reset(tStart = 0) {
+    this.t      = tStart;
+    this.speed  = (SPEED_BASE + (Math.random() - 0.5) * 2 * SPEED_SPREAD) / 1000;
+    this.size   = STAR_SIZE_MIN + Math.random() * (STAR_SIZE_MAX - STAR_SIZE_MIN);
+    this.trail  = [];
+    this.wobbleX = 0;
+    this.wobbleY = 0;
+    this.wobbleVX = (Math.random() - 0.5) * PATH_WOBBLE * 2;
+    this.wobbleVY = (Math.random() - 0.5) * PATH_WOBBLE * 2;
+    this.opacity  = 0.3 + Math.random() * 0.7;
+  }
+
+  update() {
+    this.t += this.speed;
+
+    // Slight perpendicular drift — gives organic feel while keeping flow shape
+    this.wobbleVX += (Math.random() - 0.5) * PATH_WOBBLE;
+    this.wobbleVY += (Math.random() - 0.5) * PATH_WOBBLE;
+    this.wobbleVX *= 0.92;
+    this.wobbleVY *= 0.92;
+    this.wobbleX  += this.wobbleVX;
+    this.wobbleY  += this.wobbleVY;
+
+    if (this.t > 1) {
+      // Occasionally regenerate the curve so flows evolve slowly
+      if (Math.random() < 0.03) {
+        this.curve = flows[this.flowIdx].curve;
+      }
+      this.reset();
+      return;
+    }
+
+    const pos = bezier(this.curve, this.t);
+    const px  = pos.x + this.wobbleX * 30;
+    const py  = pos.y + this.wobbleY * 30;
+
+    this.trail.push({ x: px, y: py });
+    if (this.trail.length > TRAIL_LENGTH) this.trail.shift();
+  }
+
+  draw() {
+    if (this.trail.length < 2) return;
+
+    const last = this.trail[this.trail.length - 1];
+
+    // Draw trail
+    for (let i = 1; i < this.trail.length; i++) {
+      const alpha  = (i / this.trail.length) * this.opacity;
+      const width  = this.size * (i / this.trail.length);
+      const bright = 55 + Math.round((i / this.trail.length) * 45);
+
+      ctx.beginPath();
+      ctx.moveTo(this.trail[i - 1].x, this.trail[i - 1].y);
+      ctx.lineTo(this.trail[i].x,     this.trail[i].y);
+      ctx.strokeStyle = `hsla(${this.hue},90%,${bright}%,${alpha.toFixed(3)})`;
+      ctx.lineWidth   = width;
+      ctx.lineCap     = 'round';
+      ctx.stroke();
+    }
+
+    // Draw star head — small bright glow
+    const grd = ctx.createRadialGradient(last.x, last.y, 0, last.x, last.y, this.size * 4);
+    grd.addColorStop(0,   `hsla(${this.hue},100%,95%,${this.opacity})`);
+    grd.addColorStop(0.4, `hsla(${this.hue},95%,70%,${this.opacity * 0.6})`);
+    grd.addColorStop(1,   `hsla(${this.hue},90%,60%,0)`);
+
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, this.size * 4, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+
+    // Tiny bright core
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, this.size * 0.9, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${this.hue},10%,98%,${this.opacity})`;
+    ctx.fill();
+  }
+}
+
+// ─── Build / rebuild flows ───────────────────────────────────────────────────
+let stars = [];
+
+function buildFlows() {
+  flows = [];
+  for (let i = 0; i < NUM_FLOWS; i++) {
+    flows.push({ curve: randomCubicBezier(), hue: FLOW_HUES[i % FLOW_HUES.length] });
+  }
+
+  stars = [];
+  for (let fi = 0; fi < NUM_FLOWS; fi++) {
+    for (let si = 0; si < STARS_PER_FLOW; si++) {
+      stars.push(new Star(fi, flows[fi].hue, flows[fi].curve));
+    }
+  }
+}
+
+// Slowly morph flow curves over time so the scene never feels static
+let morphTimer = 0;
+const MORPH_INTERVAL = 420; // frames between curve evolutions
+
+function morphFlows() {
+  morphTimer++;
+  if (morphTimer < MORPH_INTERVAL) return;
+  morphTimer = 0;
+
+  // Pick a random flow and gently shift one control point
+  const fi   = Math.floor(Math.random() * NUM_FLOWS);
+  const b    = flows[fi].curve;
+  const pick = Math.random() < 0.5 ? 'cp1' : 'cp2';
+  b[pick].x += (Math.random() - 0.5) * W * 0.18;
+  b[pick].y += (Math.random() - 0.5) * H * 0.18;
+  // Clamp control points to a safe region so stars stay mostly on screen
+  b[pick].x  = Math.max(-W * 0.1, Math.min(W * 1.1, b[pick].x));
+  b[pick].y  = Math.max(-H * 0.1, Math.min(H * 1.1, b[pick].y));
+}
+
+// ─── Background starfield (static tiny stars) ───────────────────────────────
+const BG_STARS = [];
+for (let i = 0; i < 280; i++) {
+  BG_STARS.push({
+    x: Math.random(),
+    y: Math.random(),
+    r: Math.random() * 0.9 + 0.2,
+    a: Math.random() * 0.5 + 0.1,
+    twinkle: Math.random() * Math.PI * 2
+  });
+}
+
+function drawBgStars() {
+  for (const s of BG_STARS) {
+    s.twinkle += 0.015;
+    const alpha = s.a + Math.sin(s.twinkle) * 0.15;
+    ctx.beginPath();
+    ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(200,210,255,${alpha.toFixed(3)})`;
+    ctx.fill();
+  }
+}
+
+// ─── Main loop ───────────────────────────────────────────────────────────────
+function loop() {
+  // Soft fade instead of full clear — gives light motion blur
+  ctx.fillStyle = 'rgba(0,0,2,0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  drawBgStars();
+  morphFlows();
+
+  for (const s of stars) {
+    s.update();
+    s.draw();
+  }
+
+  requestAnimationFrame(loop);
+}
+
+buildFlows();
+loop();
+</script>
+</body>
+</html>
