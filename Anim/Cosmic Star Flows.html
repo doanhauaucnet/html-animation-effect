@@ -7,7 +7,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #000;
+    background: #000000;
     overflow: hidden;
   }
   canvas { display: block; }
@@ -28,18 +28,69 @@ window.addEventListener('resize', () => {
   buildFlows();
 });
 
+// ─── Mouse ───────────────────────────────────────────────────────────────────
+const mouse = { x: -9999, y: -9999 };
+canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+canvas.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
+
+// ─── Gravity wells (right-click) ─────────────────────────────────────────────
+const gravityWells = [];
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  gravityWells.push({ x: e.clientX, y: e.clientY, radius: 200, life: 120, time: 0 });
+});
+
+// Left-click: smoothly morph all flows to new random curves
+canvas.addEventListener('click', () => {
+  for (let i = 0; i < NUM_FLOWS; i++) {
+    const old = flows[i].curve;
+    flows[i].srcCurve    = { p0:{...old.p0}, cp1:{...old.cp1}, cp2:{...old.cp2}, p3:{...old.p3} };
+    flows[i].targetCurve = randomCubicBezier();
+    flows[i].morphT      = 0;
+  }
+});
+
 // ─── Config ────────────────────────────────────────────────────────────────
 const NUM_FLOWS       = 7;       // number of star streams
-const STARS_PER_FLOW  = 120;     // stars per stream
-const TRAIL_LENGTH    = 22;      // history positions kept per star
+const STARS_PER_FLOW  = 70;      // stars per stream
+const TRAIL_LENGTH    = 16;      // history positions kept per star
 const PATH_WOBBLE     = 0.012;   // how much the path drifts each frame
 const SPEED_BASE      = 1.6;     // base travel speed
 const SPEED_SPREAD    = 0.9;     // ± speed variation within a flow
-const STAR_SIZE_MIN   = 0.6;
-const STAR_SIZE_MAX   = 2.2;
+const STAR_SIZE_MIN   = 1.8;
+const STAR_SIZE_MAX   = 5.0;
+const MOUSE_RADIUS    = 120;   // influence radius in px
+const MOUSE_STRENGTH  = 6.0;   // push force
 
 // palette: one hue per flow (degrees)
 const FLOW_HUES = [200, 240, 270, 300, 180, 220, 260];
+
+// Morph helpers
+const MORPH_SPEED = 0.016; // fraction per frame (~60 frames / 1 s to complete)
+function lerpPt(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
+
+// ─── Pre-rendered glow sprites (one offscreen canvas per hue) ───────────────
+const SPRITE_R = 40;
+const glowSprites = {};
+
+function buildGlowSprites() {
+  for (const hue of FLOW_HUES) {
+    const s  = SPRITE_R * 2;
+    const oc = document.createElement('canvas');
+    oc.width = oc.height = s;
+    const ox  = oc.getContext('2d');
+    const grd = ox.createRadialGradient(SPRITE_R, SPRITE_R, 0, SPRITE_R, SPRITE_R, SPRITE_R);
+    grd.addColorStop(0,    `hsla(${hue},100%,96%,1)`);
+    grd.addColorStop(0.25, `hsla(${hue},95%,75%,0.8)`);
+    grd.addColorStop(0.6,  `hsla(${hue},90%,55%,0.35)`);
+    grd.addColorStop(1,    `hsla(${hue},90%,50%,0)`);
+    ox.beginPath();
+    ox.arc(SPRITE_R, SPRITE_R, SPRITE_R, 0, Math.PI * 2);
+    ox.fillStyle = grd;
+    ox.fill();
+    glowSprites[hue] = oc;
+  }
+}
 
 // ─── Flow definition ────────────────────────────────────────────────────────
 // Each flow is described by a cubic Bezier that spans the canvas.
@@ -98,10 +149,9 @@ function bezierTangent(b, t) {
 
 // ─── Star class ──────────────────────────────────────────────────────────────
 class Star {
-  constructor(flowIdx, hue, curve) {
+  constructor(flowIdx, hue) {
     this.flowIdx = flowIdx;
     this.hue     = hue;
-    this.curve   = curve;
     this.reset(Math.random()); // stagger initial position
   }
 
@@ -115,6 +165,10 @@ class Star {
     this.wobbleVX = (Math.random() - 0.5) * PATH_WOBBLE * 2;
     this.wobbleVY = (Math.random() - 0.5) * PATH_WOBBLE * 2;
     this.opacity  = 0.3 + Math.random() * 0.7;
+    this.vx  = 0;   // velocity (Snow Sky-style)
+    this.vy  = 0;
+    this.offX = 0;  // accumulated displacement from path
+    this.offY = 0;
   }
 
   update() {
@@ -129,17 +183,52 @@ class Star {
     this.wobbleY  += this.wobbleVY;
 
     if (this.t > 1) {
-      // Occasionally regenerate the curve so flows evolve slowly
-      if (Math.random() < 0.03) {
-        this.curve = flows[this.flowIdx].curve;
-      }
       this.reset();
       return;
     }
 
-    const pos = bezier(this.curve, this.t);
-    const px  = pos.x + this.wobbleX * 30;
-    const py  = pos.y + this.wobbleY * 30;
+    const pos = bezier(flows[this.flowIdx].curve, this.t);
+    let px  = pos.x + this.wobbleX * 30;
+    let py  = pos.y + this.wobbleY * 30;
+
+    // Current displaced position (used for force calculation)
+    const cx = px + this.offX;
+    const cy = py + this.offY;
+
+    // ── Mouse push (Snow Sky style: force → vx/vy) ──────────────────────────
+    const dx   = cx - mouse.x;
+    const dy   = cy - mouse.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) + 0.1;
+    const mouseForce = Math.min(0.5, MOUSE_RADIUS / (dist * dist)) * MOUSE_STRENGTH * 0.025;
+    this.vx += (dx / dist) * mouseForce;
+    this.vy += (dy / dist) * mouseForce;
+
+    // ── Gravity wells (Snow Sky style: accelerating pull → vx/vy) ──────────
+    for (const gw of gravityWells) {
+      const gwdx = gw.x - cx;
+      const gwdy = gw.y - cy;
+      const gwd  = Math.sqrt(gwdx * gwdx + gwdy * gwdy);
+      if (gwd < gw.radius && gwd > 0.5) {
+        const pull = Math.pow(gw.time / 120, 4) * (gw.radius - gwd) * 0.02;
+        this.vx += (gwdx / gwd) * pull;
+        this.vy += (gwdy / gwd) * pull;
+      }
+    }
+
+    // Friction (same as Snow Sky)
+    this.vx *= 0.92;
+    this.vy *= 0.92;
+
+    // Accumulate velocity into offset displacement
+    this.offX += this.vx;
+    this.offY += this.vy;
+
+    // Gently pull offset back to path so stars return when undisturbed
+    this.offX *= 0.995;
+    this.offY *= 0.995;
+
+    px = cx;
+    py = cy;
 
     this.trail.push({ x: px, y: py });
     if (this.trail.length > TRAIL_LENGTH) this.trail.shift();
@@ -148,38 +237,40 @@ class Star {
   draw() {
     if (this.trail.length < 2) return;
 
-    const last = this.trail[this.trail.length - 1];
+    const len  = this.trail.length;
+    const last = this.trail[len - 1];
 
-    // Draw trail
-    for (let i = 1; i < this.trail.length; i++) {
-      const alpha  = (i / this.trail.length) * this.opacity;
-      const width  = this.size * (i / this.trail.length);
-      const bright = 55 + Math.round((i / this.trail.length) * 45);
-
+    // Draw trail in 4 batched chunks to minimize draw calls
+    const CHUNKS = 4;
+    const chunk  = Math.ceil(len / CHUNKS);
+    for (let c = 0; c < CHUNKS; c++) {
+      const start = c * chunk;
+      const end   = Math.min(start + chunk, len - 1);
+      if (start >= end) continue;
+      const t     = end / len;
+      const alpha = t * this.opacity;
+      const lw    = this.size * t;
       ctx.beginPath();
-      ctx.moveTo(this.trail[i - 1].x, this.trail[i - 1].y);
-      ctx.lineTo(this.trail[i].x,     this.trail[i].y);
-      ctx.strokeStyle = `hsla(${this.hue},90%,${bright}%,${alpha.toFixed(3)})`;
-      ctx.lineWidth   = width;
+      ctx.moveTo(this.trail[start].x, this.trail[start].y);
+      for (let i = start + 1; i <= end; i++) ctx.lineTo(this.trail[i].x, this.trail[i].y);
+      ctx.strokeStyle = `hsla(${this.hue},90%,${55 + Math.round(t * 45)}%,${alpha.toFixed(2)})`;
+      ctx.lineWidth   = lw < 0.3 ? 0.3 : lw;
       ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
       ctx.stroke();
     }
 
-    // Draw star head — small bright glow
-    const grd = ctx.createRadialGradient(last.x, last.y, 0, last.x, last.y, this.size * 4);
-    grd.addColorStop(0,   `hsla(${this.hue},100%,95%,${this.opacity})`);
-    grd.addColorStop(0.4, `hsla(${this.hue},95%,70%,${this.opacity * 0.6})`);
-    grd.addColorStop(1,   `hsla(${this.hue},90%,60%,0)`);
-
-    ctx.beginPath();
-    ctx.arc(last.x, last.y, this.size * 4, 0, Math.PI * 2);
-    ctx.fillStyle = grd;
-    ctx.fill();
+    // Draw glow head via pre-rendered sprite (no gradient per frame)
+    const sprite = glowSprites[this.hue];
+    const sr     = this.size * 3.5;
+    ctx.globalAlpha = this.opacity;
+    ctx.drawImage(sprite, last.x - sr, last.y - sr, sr * 2, sr * 2);
+    ctx.globalAlpha = 1;
 
     // Tiny bright core
     ctx.beginPath();
-    ctx.arc(last.x, last.y, this.size * 0.9, 0, Math.PI * 2);
-    ctx.fillStyle = `hsla(${this.hue},10%,98%,${this.opacity})`;
+    ctx.arc(last.x, last.y, this.size * 0.7, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(240,245,255,${this.opacity})`;
     ctx.fill();
   }
 }
@@ -190,13 +281,19 @@ let stars = [];
 function buildFlows() {
   flows = [];
   for (let i = 0; i < NUM_FLOWS; i++) {
-    flows.push({ curve: randomCubicBezier(), hue: FLOW_HUES[i % FLOW_HUES.length] });
+    flows.push({
+      curve:       randomCubicBezier(),
+      hue:         FLOW_HUES[i % FLOW_HUES.length],
+      srcCurve:    null,
+      targetCurve: null,
+      morphT:      1   // 1 = no morph in progress
+    });
   }
 
   stars = [];
   for (let fi = 0; fi < NUM_FLOWS; fi++) {
     for (let si = 0; si < STARS_PER_FLOW; si++) {
-      stars.push(new Star(fi, flows[fi].hue, flows[fi].curve));
+      stars.push(new Star(fi, flows[fi].hue));
     }
   }
 }
@@ -210,28 +307,50 @@ function morphFlows() {
   if (morphTimer < MORPH_INTERVAL) return;
   morphTimer = 0;
 
-  // Pick a random flow and gently shift one control point
-  const fi   = Math.floor(Math.random() * NUM_FLOWS);
-  const b    = flows[fi].curve;
+  const fi  = Math.floor(Math.random() * NUM_FLOWS);
+  const old = flows[fi].curve;
   const pick = Math.random() < 0.5 ? 'cp1' : 'cp2';
-  b[pick].x += (Math.random() - 0.5) * W * 0.18;
-  b[pick].y += (Math.random() - 0.5) * H * 0.18;
-  // Clamp control points to a safe region so stars stay mostly on screen
-  b[pick].x  = Math.max(-W * 0.1, Math.min(W * 1.1, b[pick].x));
-  b[pick].y  = Math.max(-H * 0.1, Math.min(H * 1.1, b[pick].y));
+  let nx = old[pick].x + (Math.random() - 0.5) * W * 0.18;
+  let ny = old[pick].y + (Math.random() - 0.5) * H * 0.18;
+  nx = Math.max(-W * 0.1, Math.min(W * 1.1, nx));
+  ny = Math.max(-H * 0.1, Math.min(H * 1.1, ny));
+
+  flows[fi].srcCurve    = { p0:{...old.p0}, cp1:{...old.cp1}, cp2:{...old.cp2}, p3:{...old.p3} };
+  flows[fi].targetCurve = {
+    p0:  old.p0,
+    cp1: pick === 'cp1' ? { x: nx, y: ny } : { x: old.cp1.x, y: old.cp1.y },
+    cp2: pick === 'cp2' ? { x: nx, y: ny } : { x: old.cp2.x, y: old.cp2.y },
+    p3:  old.p3
+  };
+  flows[fi].morphT = 0;
 }
 
-// ─── Background starfield (static tiny stars) ───────────────────────────────
-const BG_STARS = [];
-for (let i = 0; i < 280; i++) {
-  BG_STARS.push({
-    x: Math.random(),
-    y: Math.random(),
-    r: Math.random() * 0.9 + 0.2,
-    a: Math.random() * 0.5 + 0.1,
-    twinkle: Math.random() * Math.PI * 2
-  });
+// Advance all in-progress curve morphs each frame
+function updateFlowMorphs() {
+  for (const flow of flows) {
+    if (flow.morphT >= 1) continue;
+    flow.morphT = Math.min(1, flow.morphT + MORPH_SPEED);
+    // Ease in-out
+    const e = flow.morphT < 0.5
+      ? 2 * flow.morphT * flow.morphT
+      : -1 + (4 - 2 * flow.morphT) * flow.morphT;
+    flow.curve = {
+      p0:  lerpPt(flow.srcCurve.p0,  flow.targetCurve.p0,  e),
+      cp1: lerpPt(flow.srcCurve.cp1, flow.targetCurve.cp1, e),
+      cp2: lerpPt(flow.srcCurve.cp2, flow.targetCurve.cp2, e),
+      p3:  lerpPt(flow.srcCurve.p3,  flow.targetCurve.p3,  e),
+    };
+  }
 }
+
+// ─── Background starfield ─────────────────────────────────────────────────
+const BG_STARS = Array.from({ length: 280 }, () => ({
+  x: Math.random(),
+  y: Math.random(),
+  r: Math.random() * 0.9 + 0.2,
+  a: Math.random() * 0.5 + 0.1,
+  twinkle: Math.random() * Math.PI * 2
+}));
 
 function drawBgStars() {
   for (const s of BG_STARS) {
@@ -244,14 +363,47 @@ function drawBgStars() {
   }
 }
 
+// ─── Gravity well visuals ─────────────────────────────────────────────────
+function drawGravityWells() {
+  for (let i = gravityWells.length - 1; i >= 0; i--) {
+    const gw = gravityWells[i];
+    gw.time++;
+    gw.life--;
+    if (gw.life <= 0) { gravityWells.splice(i, 1); continue; }
+
+    const progress = gw.time / 120;
+    const fadeOut  = Math.min(1, gw.life / 20);
+    const alpha    = fadeOut * 0.75;
+
+    // Ring shrinks as well intensifies — mirrors Snow Sky
+    const ringR = gw.radius * (gw.life / 120);
+    ctx.beginPath();
+    ctx.arc(gw.x, gw.y, ringR, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(180,140,255,${(alpha * 0.4).toFixed(3)})`;
+    ctx.lineWidth   = 1.2;
+    ctx.stroke();
+
+    const coreR = 6 + progress * progress * 30;
+    const grd   = ctx.createRadialGradient(gw.x, gw.y, 0, gw.x, gw.y, coreR);
+    grd.addColorStop(0,   `rgba(200,160,255,${(alpha * 0.9).toFixed(3)})`);
+    grd.addColorStop(0.5, `rgba(140,100,255,${(alpha * 0.4).toFixed(3)})`);
+    grd.addColorStop(1,   'rgba(100,60,255,0)');
+    ctx.beginPath();
+    ctx.arc(gw.x, gw.y, coreR, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+  }
+}
+
 // ─── Main loop ───────────────────────────────────────────────────────────────
 function loop() {
-  // Soft fade instead of full clear — gives light motion blur
-  ctx.fillStyle = 'rgba(0,0,2,0.18)';
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.fillRect(0, 0, W, H);
 
-  drawBgStars();
   morphFlows();
+  updateFlowMorphs();
+  drawBgStars();
+  drawGravityWells();
 
   for (const s of stars) {
     s.update();
@@ -261,6 +413,7 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
+buildGlowSprites();
 buildFlows();
 loop();
 </script>
